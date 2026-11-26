@@ -30,7 +30,7 @@ service cloud.firestore {
         && request.resource.data.name.size() <= 40;
       allow update: if isStaff()
         || (signedIn() && uid == me()
-            && onlyChanges(['name', 'org', 'region', 'phone', 'mode', 'birthYear', 'updatedAt', 'largeText', 'optionalConsent', 'photoConsent', 'privacyVersion', 'termsVersion']));
+            && onlyChanges(['name', 'org', 'region', 'phone', 'mode', 'birthYear', 'updatedAt', 'largeText', 'optionalConsent', 'photoConsent', 'privacyVersion', 'termsVersion', 'orgRegion', 'orgCouncil', 'memberType']));
       allow delete: if isStaff() || (signedIn() && uid == me());
     }
 

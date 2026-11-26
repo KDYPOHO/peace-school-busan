@@ -27,6 +27,7 @@ www/                 웹 앱 (이 폴더가 그대로 웹·안드로이드·아�
   js/app.js          화면과 동작
   js/backend.js      Firebase / 체험 모드 데이터 처리
   js/faq.js          도우미 답변집
+  js/councils.js     민주평통 지역회의·협의회 목록 (국내 17 + 해외)
 firestore.rules      데이터 보안 규칙 (Firebase 콘솔에 게시된 내용과 같음)
 android/  ios/       Capacitor로 만든 네이티브 앱 프로젝트
 .github/workflows/   웹 자동 배포, 안드로이드 APK 자동 빌드

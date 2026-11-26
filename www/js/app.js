@@ -2,6 +2,8 @@
 import { APP, LECTURES, VENUE, PASS_COUNT, ONSITE_CAP, DEEP, TEAMS, CRITERIA, REGIONS, DEEP_APPLY_UNTIL, DEEP_STATUS } from "./config.js";
 import { createBackend, isNative } from "./backend.js";
 import { faqAnswer, FAQ_CHIPS } from "./faq.js";
+import { ORG_ROOT, REGION_COUNCILS, DOMESTIC, OVERSEAS, NONE as ORG_NONE, affiliationLabel, affiliationFull } from "./councils.js";
+const MEMBER_TYPES = ["자문위원", "청년 서포터즈·추천 청년", "일반 청년"];
 import { privacyHtml, termsHtml, permissionsHtml, consentTable, CONSENT_REQUIRED, CONSENT_OPTIONAL, CONSENT_PHOTO } from "./legal.js";
 
 /* ───────── 공통 도구 ───────── */
@@ -99,7 +101,7 @@ function shell() {
   <header class="top">
     <div class="top-row">
       <div class="mark"><img src="img/symbol.jpg" alt="민주평통 심벌"></div>
-      <div class="top-title"><b>${esc(APP.name)}</b><span>${esc(APP.org)}</span></div>
+      <div class="top-title"><b>${esc(APP.name)}</b><span id="topOrg">${esc(S.profile ? affiliationFull(S.profile) : ORG_ROOT)}</span></div>
       <button class="bell" id="bellBtn" aria-label="공지함">${ic("home").replace(ICON.home, '<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>')}<i id="bellDot" hidden></i></button>
     </div>
     <div class="seg" id="seg" role="group" aria-label="화면 구분" hidden>
@@ -125,6 +127,7 @@ function render(anim) {
   if (!S.profile && !S.staff) return renderOnboard();
   if (!$("#view")) shell();
   $("#seg").hidden = !S.staff;
+  const to = $("#topOrg"); if (to) to.textContent = S.profile ? affiliationFull(S.profile) : ORG_ROOT;
   $("#seg").classList.toggle("a", S.role === "a");
   $("#roleP").setAttribute("aria-pressed", S.role === "p");
   $("#roleA").setAttribute("aria-pressed", S.role === "a");
@@ -243,7 +246,7 @@ function renderAuth() {
   const signup = S.authMode === "signup";
   $("#root").innerHTML = `
   <div class="auth">
-    <div class="logo"><div class="tile"><img src="img/symbol.jpg" alt="민주평통 심벌"></div><b>${esc(APP.name)}</b><span>${esc(APP.org)}</span></div>
+    <div class="logo"><div class="tile"><img src="img/symbol.jpg" alt="민주평통 심벌"></div><b>${esc(APP.name)}</b><span>${esc(ORG_ROOT)}</span></div>
     <section class="card">
       <h2 style="margin:0 0 4px">${signup ? "회원가입" : "로그인"}</h2>
       <p class="small muted" style="margin:0 0 12px">${signup ? "이메일과 비밀번호로 계정을 만든 뒤 수강 신청서를 작성해요." : "수강 신청, QR 출석, 수료증을 앱 하나로 관리해요."}</p>
@@ -315,13 +318,16 @@ function onboardCard() {
   else if (st === 1) body = `
     <h2 style="margin:0 0 4px">2. 소속과 참여 방식</h2><p class="small muted" style="margin:0 0 12px">전국 어디서나 참여할 수 있어요. 현장 정원은 ${ONSITE_CAP}명이에요.</p>
     <label class="f">거주 지역<select id="oRegion"><option value="">선택</option>${REGIONS.map(r => `<option ${d.region === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
+    <label class="f">민주평통 소속 지역회의<select id="oOrgR"><option value="">선택</option><optgroup label="국내">${DOMESTIC.map(r => `<option value="${r}" ${d.orgRegion === r ? "selected" : ""}>${r}지역회의</option>`).join("")}</optgroup><optgroup label="해외">${OVERSEAS.map(r => `<option value="${r}" ${d.orgRegion === r ? "selected" : ""}>${r}지역회의</option>`).join("")}</optgroup><option value="${ORG_NONE}" ${d.orgRegion === ORG_NONE ? "selected" : ""}>${ORG_NONE}</option></select></label>
+    <div id="oOrgCWrap">${orgCouncilField(d.orgRegion, d.orgCouncil, "oOrgC")}</div>
+    <label class="f">참가 구분<select id="oType"><option value="">선택</option>${MEMBER_TYPES.map(t => `<option ${d.memberType === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
     <label class="f">소속 (학교·직장, 선택)<input id="oOrg" maxlength="40" value="${esc(d.org || "")}" placeholder="예: 부산대학교"></label>
     <div class="f" role="radiogroup" aria-label="참여 방식"><span class="small" style="font-weight:600">참여 방식</span>
       <div class="chips" style="margin-top:6px">${[["onsite", "부산 현장"], ["online", "온라인"]].map(([k, l]) => `<button type="button" class="chip" data-mode="${k}" aria-pressed="${(d.mode || "onsite") === k}">${l}</button>`).join("")}</div></div>
     <p class="small muted" style="margin:0">${esc(VENUE)} · 두 방식 모두 출석으로 인정돼요.</p>`;
   else body = `
     <h2 style="margin:0 0 4px">3. 동의와 확인</h2><p class="small muted" style="margin:0 0 12px">아래 내용으로 신청해요.</p>
-    <dl class="kv"><dt>이름</dt><dd>${esc(d.name)}</dd><dt>출생연도</dt><dd>${esc(d.birthYear)}년</dd><dt>지역</dt><dd>${esc(d.region)}</dd><dt>소속</dt><dd>${esc(d.org || "-")}</dd><dt>참여</dt><dd>${(d.mode || "onsite") === "online" ? "온라인" : "부산 현장"}</dd></dl>
+    <dl class="kv"><dt>이름</dt><dd>${esc(d.name)}</dd><dt>출생연도</dt><dd>${esc(d.birthYear)}년</dd><dt>지역</dt><dd>${esc(d.region)}</dd><dt>민주평통</dt><dd>${esc(affiliationLabel(d))}</dd><dt>구분</dt><dd>${esc(d.memberType)}</dd><dt>소속</dt><dd>${esc(d.org || "-")}</dd><dt>참여</dt><dd>${(d.mode || "onsite") === "online" ? "온라인" : "부산 현장"}</dd></dl>
     <label class="check all" style="margin-top:12px"><input type="checkbox" id="oAll"> <b>아래 내용에 모두 동의합니다</b></label>
     <label class="check"><input type="checkbox" class="oc" id="oT"> [필수] 이용약관 동의 <button type="button" class="btn ghost mini" id="oTv">보기</button></label>
     <label class="check"><input type="checkbox" class="oc" id="oC1"> [필수] 개인정보 수집·이용 동의</label>
@@ -340,6 +346,7 @@ function onboardCard() {
 function bindOnboard() {
   const d = S.draft, err = m => ($("#oErr").textContent = m || "");
   const redraw = () => { const v = $("#view"); v.innerHTML = onboardCard(); bindOnboard(); };
+  const orr = $("#oOrgR"); orr && (orr.onchange = () => { $("#oOrgCWrap").innerHTML = orgCouncilField(orr.value, "", "oOrgC"); });
   $$("[data-mode]").forEach(b => (b.onclick = () => { d.mode = b.dataset.mode; $$("[data-mode]").forEach(x => x.setAttribute("aria-pressed", x === b)); }));
   const pv = $("#oPv"); pv && (pv.onclick = e => { e.preventDefault(); privacySheet(); });
   const tv = $("#oTv"); tv && (tv.onclick = e => { e.preventDefault(); termsSheet(); });
@@ -355,16 +362,20 @@ function bindOnboard() {
       if (d.phone && !/^01[016789]-?\d{3,4}-?\d{4}$/.test(d.phone)) return err("휴대폰 번호 형식을 확인해 주세요. 예: 010-1234-5678");
     } else if (S.onboardStep === 1) {
       d.region = $("#oRegion").value; d.org = $("#oOrg").value.trim(); d.mode = d.mode || "onsite";
+      d.orgRegion = $("#oOrgR").value; d.orgCouncil = ($("#oOrgC") ? $("#oOrgC").value.trim() : ""); d.memberType = $("#oType").value;
+      if (!d.orgRegion) return err("민주평통 소속 지역회의를 골라 주세요. 소속이 없으면 '해당 없음'을 고르면 돼요.");
+      if (d.orgRegion !== ORG_NONE && !d.orgCouncil) return err("소속 협의회를 골라 주세요.");
+      if (!d.memberType) return err("참가 구분을 골라 주세요.");
       if (!d.region) return err("거주 지역을 골라 주세요.");
     } else {
       if (!$("#oT").checked || !$("#oC1").checked || !$("#oC2").checked) return err("[필수] 항목 세 가지에 동의해 주세요.");
       d.photo = $("#oC3").checked; d.opt = $("#oC4").checked;
       const btn = $("#oNext"); btn.disabled = true; btn.textContent = "신청 중…";
       try {
-        S.profile = await B.createProfile({ name: d.name, birthYear: +d.birthYear, phone: d.opt ? d.phone : "", region: d.region, org: d.opt ? d.org : "", mode: d.mode, optionalConsent: d.opt, photoConsent: d.photo, termsAgreed: true, privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion });
+        S.profile = await B.createProfile({ name: d.name, birthYear: +d.birthYear, phone: d.opt ? d.phone : "", region: d.region, orgRegion: d.orgRegion, orgCouncil: d.orgRegion === ORG_NONE ? "" : d.orgCouncil, memberType: d.memberType, org: d.opt ? d.org : "", mode: d.mode, optionalConsent: d.opt, photoConsent: d.photo, termsAgreed: true, privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion });
         if (!d.opt && (d.phone || d.org)) setTimeout(() => toast("선택 동의를 하지 않아 휴대폰 번호와 소속은 저장하지 않았어요", 3600), 2800);
-        S.draft = {}; S.onboardStep = 0; S.role = "p"; startProfileData();
-        shell(); render("fwd");
+        S.draft = {}; S.onboardStep = 0; S.role = "p";
+        shell(); startProfileData(); render("fwd");
         celebrate("수강 신청 완료", `수강번호 ${S.profile.no}`, "환영해요");
       } catch (e2) { console.error(e2); err("신청서를 저장하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요."); btn.disabled = false; btn.textContent = "신청 완료"; }
       return;
@@ -372,6 +383,13 @@ function bindOnboard() {
     S.onboardStep++; redraw();
   };
 }
+
+function orgCouncilField(region, val, id) {
+  if (!region || region === ORG_NONE) return "";
+  if (REGION_COUNCILS[region]) return `<label class="f">소속 협의회<select id="${id}"><option value="">선택</option>${REGION_COUNCILS[region].map(c => `<option ${val === c ? "selected" : ""}>${c}</option>`).join("")}</select></label>`;
+  return `<label class="f">소속 협의회 (예: 뉴욕협의회)<input id="${id}" maxlength="40" value="${esc(val || "")}"></label>`;
+}
+const orgKey = u => (u.orgRegion && u.orgRegion !== ORG_NONE ? u.orgRegion : ORG_NONE);
 
 /* ───────── 참가자 화면 ───────── */
 function lectureCard(l, tag) {
@@ -471,7 +489,7 @@ const VIEWS = {
     return `
     <section class="card">
       <div class="row between"><h2 style="margin:0">${esc(p.name)}</h2><span class="pill p-gold">${esc(p.no)}</span></div>
-      <dl class="kv" style="margin-top:10px"><dt>이메일</dt><dd>${esc(p.email || S.user.email)}</dd><dt>지역</dt><dd>${esc(p.region)}</dd><dt>소속</dt><dd>${esc(p.org || "-")}</dd><dt>연락처</dt><dd>${esc(p.phone || "-")}</dd><dt>참여</dt><dd>${p.mode === "online" ? "온라인" : "부산 현장"}</dd><dt>선택 동의</dt><dd>연락처·소속 ${p.optionalConsent ? "동의" : "미동의"} · 사진 ${p.photoConsent ? "동의" : "미동의"}</dd></dl>
+      <dl class="kv" style="margin-top:10px"><dt>이메일</dt><dd>${esc(p.email || S.user.email)}</dd><dt>민주평통</dt><dd>${esc(affiliationLabel(p))} · ${esc(p.memberType || "-")}</dd><dt>지역</dt><dd>${esc(p.region)}</dd><dt>소속</dt><dd>${esc(p.org || "-")}</dd><dt>연락처</dt><dd>${esc(p.phone || "-")}</dd><dt>참여</dt><dd>${p.mode === "online" ? "온라인" : "부산 현장"}</dd><dt>선택 동의</dt><dd>연락처·소속 ${p.optionalConsent ? "동의" : "미동의"} · 사진 ${p.photoConsent ? "동의" : "미동의"}</dd></dl>
       <button class="btn ghost block" style="margin-top:12px" id="editBtn">정보 수정 · 동의 변경</button>
     </section>
     <section class="card">
@@ -517,6 +535,10 @@ const VIEWS = {
       <div class="row wrap" style="gap:8px"><button class="btn ghost" id="riskBtn" ${st.risk.length ? "" : "disabled"}>명단 보기</button><button class="btn ghost" id="nudgeBtn" ${st.risk.length ? "" : "disabled"}>독려 공지 쓰기</button></div>
     </section>
     <section class="card">
+      <div class="row between"><h2 style="margin:0">소속별 신청</h2><span class="small muted">지역회의 기준</span></div>
+      <div class="list small" style="margin-top:8px">${[...DOMESTIC, ...OVERSEAS, ORG_NONE].map(r => { const us = S.users.filter(u => orgKey(u) === r); return { r, k: us.length, p: us.filter(u => attOf(u.uid).length >= PASS_COUNT).length }; }).filter(x => x.k).sort((a, b) => b.k - a.k).map(x => `<div class="li"><div class="body"><div class="row between"><span>${esc(x.r === ORG_NONE ? x.r : x.r + "지역회의")}</span><span class="num">${x.k}명 · 수료 요건 ${x.p}명</span></div></div></div>`).join("") || '<p class="muted">아직 신청자가 없어요.</p>'}</div>
+    </section>
+    <section class="card">
       <h2>강별 출석</h2>
       <div class="list">${LECTURES.map(x => { const k = S.allAtt.filter(a => a.lecture === x.n).length; const pct = st.n ? Math.round(k / st.n * 100) : 0; return `<div class="li"><div class="dot ${lectureState(x) === "past" ? "done" : lectureState(x) === "today" ? "now" : ""}">${x.n}</div><div class="body"><div class="row between small"><span>${fmtDate(x.date)}</span><span class="num">${k}명 · ${pct}%</span></div><div class="bar" style="margin-top:4px"><i style="width:${pct}%"></i></div></div></div>`; }).join("")}</div>
     </section>
@@ -536,16 +558,18 @@ const VIEWS = {
     const q = (S.peopleQ || "").trim(), f = S.peopleF || "all";
     const rows = S.users.map(u => ({ ...u, att: attOf(u.uid) })).map(u => ({ ...u, rem: remainingFor(u.att) }))
       .filter(u => f === "all" || (f === "pass" && u.att.length >= PASS_COUNT) || (f === "risk" && u.att.length < PASS_COUNT && u.att.length + u.rem >= PASS_COUNT && u.att.length + u.rem - PASS_COUNT <= 0) || (f === "lost" && u.att.length + u.rem < PASS_COUNT) || (f === "online" && u.mode === "online"))
-      .filter(u => !q || [u.name, u.no, u.org, u.region, u.email].some(x => String(x || "").toLowerCase().includes(q.toLowerCase())))
+      .filter(u => !S.peopleC || orgKey(u) === S.peopleC)
+      .filter(u => !q || [u.name, u.no, u.org, u.region, u.email, affiliationLabel(u)].some(x => String(x || "").toLowerCase().includes(q.toLowerCase())))
       .sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"));
     return `
     <section class="card">
       <div class="row between"><h2 style="margin:0">참가자</h2><span class="small muted num">${rows.length} / ${S.users.length}명</span></div>
       <input class="search" id="pq" style="margin-top:10px" placeholder="이름, 수강번호, 소속, 지역 검색" value="${esc(q)}" aria-label="참가자 검색">
+      <select id="pc" class="search" style="margin-top:8px" aria-label="소속 지역회의로 거르기"><option value="">모든 소속</option>${[...DOMESTIC, ...OVERSEAS, ORG_NONE].map(r => { const k = S.users.filter(u => orgKey(u) === r).length; return k || S.peopleC === r ? `<option value="${esc(r)}" ${S.peopleC === r ? "selected" : ""}>${r === ORG_NONE ? r : r + "지역회의"} (${k})</option>` : ""; }).join("")}</select>
       <div class="chips" style="margin-top:10px">${[["all", "전체"], ["pass", "수료 요건 충족"], ["risk", "수료 위험"], ["lost", "수료 불가"], ["online", "온라인"]].map(([k, l]) => `<button class="chip" data-pf="${k}" aria-pressed="${f === k}">${l}</button>`).join("")}</div>
     </section>
     <section class="card" style="padding-top:6px">
-      <div class="list" id="pList">${rows.length ? rows.slice(0, 300).map(u => `<button class="li" data-user="${esc(u.uid)}" style="width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0;cursor:pointer"><div class="body"><div class="k">${esc(u.name)} <span class="small muted" style="font-weight:400">${esc(u.region)}${u.org ? " · " + esc(u.org) : ""}</span></div><div class="small muted">${esc(u.no)} · ${u.mode === "online" ? "온라인" : "현장"}${S.staffList.some(s => s.id === u.uid) ? " · 운영진" : ""}</div></div><span class="pill ${u.att.length >= PASS_COUNT ? "p-ok" : u.att.length + u.rem < PASS_COUNT ? "p-bad" : "p-mute"} num">${u.att.length}/${LECTURES.length}</span></button>`).join("") : '<p class="small muted">조건에 맞는 참가자가 없어요.</p>'}</div>
+      <div class="list" id="pList">${rows.length ? rows.slice(0, 300).map(u => `<button class="li" data-user="${esc(u.uid)}" style="width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0;cursor:pointer"><div class="body"><div class="k">${esc(u.name)} <span class="small muted" style="font-weight:400">${esc(affiliationLabel(u))}${u.org ? " · " + esc(u.org) : ""}</span></div><div class="small muted">${esc(u.no)} · ${esc(u.memberType || "")} · ${u.mode === "online" ? "온라인" : "현장"}${S.staffList.some(s => s.id === u.uid) ? " · 운영진" : ""}</div></div><span class="pill ${u.att.length >= PASS_COUNT ? "p-ok" : u.att.length + u.rem < PASS_COUNT ? "p-bad" : "p-mute"} num">${u.att.length}/${LECTURES.length}</span></button>`).join("") : '<p class="small muted">조건에 맞는 참가자가 없어요.</p>'}</div>
     </section>`;
   },
   scan() {
@@ -600,6 +624,7 @@ const VIEWS = {
       <div class="row between"><h2 style="margin:0">심화과정 선발</h2><span class="pill ${over ? "p-bad" : sel === DEEP.cap ? "p-ok" : "p-gold"} num">${sel} / ${DEEP.cap}명</span></div>
       <div class="bar ${over ? "over" : "gold"}" style="margin:10px 0 6px"><i style="width:${Math.min(100, sel / DEEP.cap * 100)}%"></i></div>
       <p class="small muted" style="margin:0">정원 ${DEEP.cap}명을 넘겨 선발할 수 없어요. 지원 ${S.deepApps.length}건 · 예비 ${S.deepApps.filter(a => a.status === "waitlist").length}명. 선발은 운영위원회가 직접 하고, 앱은 출석과 지원서를 나란히 보여 주기만 해요.</p>
+      <select id="pc" class="search" style="margin-top:8px" aria-label="소속 지역회의로 거르기"><option value="">모든 소속</option>${[...DOMESTIC, ...OVERSEAS, ORG_NONE].map(r => { const k = S.users.filter(u => orgKey(u) === r).length; return k || S.peopleC === r ? `<option value="${esc(r)}" ${S.peopleC === r ? "selected" : ""}>${r === ORG_NONE ? r : r + "지역회의"} (${k})</option>` : ""; }).join("")}</select>
       <div class="chips" style="margin-top:10px">${[["all", "전체"], ["submitted", "검토 중"], ["selected", "선발"], ["waitlist", "예비"], ["rejected", "미선발"]].map(([k, l]) => `<button class="chip" data-df="${k}" aria-pressed="${f === k}">${l}</button>`).join("")}</div>
     </section>
     <section class="card" style="padding-top:6px">
@@ -693,17 +718,22 @@ function editProfileSheet() {
     <label class="f">이름 (수료증 표기)<input id="eName" maxlength="40" value="${esc(p.name)}" required></label>
     <label class="check"><input type="checkbox" id="eOpt" ${p.optionalConsent ? "checked" : ""}> [선택] 휴대폰 번호·소속 수집·이용 동의 (끄면 두 정보가 즉시 지워져요)</label>
     <label class="f">소속<input id="eOrg" maxlength="40" value="${esc(p.org || "")}"></label>
+    <label class="f">민주평통 소속 지역회의<select id="eOrgR">${[...DOMESTIC, ...OVERSEAS].map(r => `<option value="${r}" ${p.orgRegion === r ? "selected" : ""}>${r}지역회의</option>`).join("")}<option value="${ORG_NONE}" ${!p.orgRegion || p.orgRegion === ORG_NONE ? "selected" : ""}>${ORG_NONE}</option></select></label>
+    <div id="eOrgCWrap">${orgCouncilField(p.orgRegion, p.orgCouncil, "eOrgC")}</div>
+    <label class="f">참가 구분<select id="eType">${MEMBER_TYPES.map(t => `<option ${p.memberType === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
     <label class="f">거주 지역<select id="eRegion">${REGIONS.map(r => `<option ${p.region === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
     <label class="f">휴대폰 번호<input id="ePhone" inputmode="tel" value="${esc(p.phone || "")}"></label>
     <label class="check"><input type="checkbox" id="ePhoto" ${p.photoConsent ? "checked" : ""}> [선택] 행사 사진·영상 촬영 및 활용 동의</label>
     <label class="f">참여 방식<select id="eMode"><option value="onsite" ${p.mode !== "online" ? "selected" : ""}>부산 현장</option><option value="online" ${p.mode === "online" ? "selected" : ""}>온라인</option></select></label>
     <p class="err" id="eErr" role="alert"></p><button class="btn" type="submit">저장</button></form>`);
+  $("#eOrgR").onchange = () => { $("#eOrgCWrap").innerHTML = orgCouncilField($("#eOrgR").value, "", "eOrgC"); };
   $("#pf").onsubmit = async e => {
     e.preventDefault();
     const opt = $("#eOpt").checked;
-    const d = { name: $("#eName").value.trim(), org: opt ? $("#eOrg").value.trim() : "", region: $("#eRegion").value, phone: opt ? $("#ePhone").value.trim() : "", mode: $("#eMode").value, optionalConsent: opt, photoConsent: $("#ePhoto").checked };
+    const d = { name: $("#eName").value.trim(), org: opt ? $("#eOrg").value.trim() : "", region: $("#eRegion").value, orgRegion: $("#eOrgR").value, orgCouncil: $("#eOrgR").value === ORG_NONE ? "" : ($("#eOrgC") ? $("#eOrgC").value.trim() : ""), memberType: $("#eType").value, phone: opt ? $("#ePhone").value.trim() : "", mode: $("#eMode").value, optionalConsent: opt, photoConsent: $("#ePhoto").checked };
     if (!opt && ($("#eOrg").value.trim() || $("#ePhone").value.trim()) && !confirmedOpt) { confirmedOpt = true; return ($("#eErr").textContent = "선택 동의를 끄면 휴대폰 번호와 소속이 지워져요. 맞으면 저장을 한 번 더 눌러 주세요."); }
     if (!d.name) return ($("#eErr").textContent = "이름을 적어 주세요.");
+    if (d.orgRegion !== ORG_NONE && !d.orgCouncil) return ($("#eErr").textContent = "소속 협의회를 골라 주세요.");
     if (d.phone && !/^01[016789]-?\d{3,4}-?\d{4}$/.test(d.phone)) return ($("#eErr").textContent = "휴대폰 번호 형식을 확인해 주세요.");
     try { await B.updateProfile(d); Object.assign(S.profile, d); closeSheet(); render(); toast("저장했어요"); }
     catch (e2) { $("#eErr").textContent = "저장하지 못했어요. 다시 시도해 주세요."; }
@@ -744,12 +774,12 @@ function rankRows() {
   return rows.map((r, k) => `<tr data-team="${r.i}"><td><span class="rank ${k === 0 && r.k ? "g1" : ""}">${k + 1}</span></td><td>${esc(r.t)}${J.round === "예선" && k < 4 && r.k ? ' <span class="pill p-ok">본선</span>' : ""}</td><td class="r num">${r.k}</td><td class="r num">${r.k ? r.avg.toFixed(1) : "-"}</td></tr>`).join("");
 }
 function csvExport() {
-  const head = ["수강번호", "이름", "이메일", "출생연도", "지역", "소속", "연락처", "참여방식", ...LECTURES.map(l => `${l.n}강`), "출석 수", "수료", "심화 지원", "심화 결과", "선택 동의", "사진 동의", "신청일"];
+  const head = ["수강번호", "이름", "이메일", "출생연도", "지역", "민주평통 소속", "참가 구분", "소속", "연락처", "참여방식", ...LECTURES.map(l => `${l.n}강`), "출석 수", "수료", "심화 지원", "심화 결과", "선택 동의", "사진 동의", "신청일"];
   const lines = [head];
   S.users.forEach(u => {
     const att = attOf(u.uid), d = S.deepApps.find(a => a.uid === u.uid);
     const m = l => { const r = S.allAtt.find(a => a.uid === u.uid && a.lecture === l.n); return r ? (r.method === "online" ? "온라인" : r.method === "manual" ? "수동" : "현장") : ""; };
-    lines.push([u.no, u.name, u.email, u.birthYear, u.region, u.org, u.phone, u.mode === "online" ? "온라인" : "현장", ...LECTURES.map(m), att.length, att.length >= PASS_COUNT ? "Y" : "N", d ? "Y" : "N", d ? DEEP_STATUS[d.status] || "" : "", u.optionalConsent ? "Y" : "N", u.photoConsent ? "Y" : "N", u.createdAt ? fmtTime(u.createdAt) : ""]);
+    lines.push([u.no, u.name, u.email, u.birthYear, u.region, affiliationLabel(u), u.memberType || "", u.org, u.phone, u.mode === "online" ? "온라인" : "현장", ...LECTURES.map(m), att.length, att.length >= PASS_COUNT ? "Y" : "N", d ? "Y" : "N", d ? DEEP_STATUS[d.status] || "" : "", u.optionalConsent ? "Y" : "N", u.photoConsent ? "Y" : "N", u.createdAt ? fmtTime(u.createdAt) : ""]);
   });
   const csv = "﻿" + lines.map(r => r.map(v => { v = String(v ?? ""); if (/^[=+\-@]/.test(v)) v = "'" + v; return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; }).join(",")).join("\r\n");
   const name = `평화학교_참가자_${todayStr()}.csv`;
@@ -765,12 +795,17 @@ function reportDraft() {
   const byRegion = {}; S.users.forEach(u => (byRegion[u.region] = (byRegion[u.region] || 0) + 1));
   const top = Object.entries(byRegion).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([r, k]) => `${r} ${k}명`).join(", ");
   const online = S.users.filter(u => u.mode === "online").length;
+  const byAff = {}; S.users.forEach(u => { const c = affiliationLabel(u); byAff[c] = (byAff[c] || 0) + 1; });
+  const affLine = Object.entries(byAff).sort((a, b) => b[1] - a[1]).map(([c, k]) => `${c === ORG_ROOT ? "소속 없음(일반 청년)" : c} ${k}명`).join(", ");
+  const byType = MEMBER_TYPES.map(t => `${t} ${S.users.filter(u => u.memberType === t).length}명`).join(", ");
   const t = `${APP.year} ${APP.name} 결과보고(초안)
 작성 기준일: ${fmtDate(todayStr())} / 앱 집계 자동 작성, 담당자 검토 후 확정
 
 1. 참가 현황
  - 기본과정 신청: ${st.n}명 (${st.regions}개 시·도, 온라인 희망 ${online}명)
  - 지역 분포 상위: ${top || "-"}
+ - 민주평통 소속별: ${affLine || "-"}
+ - 참가 구분: ${byType}
 
 2. 출결 현황
 ${LECTURES.map(l => { const k = S.allAtt.filter(a => a.lecture === l.n); return ` - ${l.n}강 ${fmtDate(l.date)} 「${l.title}」: ${k.length}명 (현장 ${k.filter(a => a.method !== "online").length}, 온라인 ${k.filter(a => a.method === "online").length})`; }).join("\n")}
@@ -806,7 +841,7 @@ function userSheet(uid) {
   const u = S.users.find(x => x.uid === uid); if (!u) return;
   const att = attOf(uid), isSt = S.staffList.some(s => s.id === uid), d = S.deepApps.find(a => a.uid === uid);
   sheet(`<div class="row between"><h2 style="margin:0;font-size:1.05rem">${esc(u.name)}</h2><span class="pill p-gold">${esc(u.no)}</span></div>
-  <dl class="kv" style="margin-top:10px"><dt>이메일</dt><dd>${esc(u.email)}</dd><dt>출생</dt><dd>${esc(u.birthYear)}년</dd><dt>지역</dt><dd>${esc(u.region)}</dd><dt>소속</dt><dd>${esc(u.org || "-")}</dd><dt>연락처</dt><dd>${esc(u.phone || "-")}</dd><dt>참여</dt><dd>${u.mode === "online" ? "온라인" : "현장"}</dd><dt>사진 동의</dt><dd>${u.photoConsent ? "동의" : "미동의"}</dd><dt>심화</dt><dd>${d ? DEEP_STATUS[d.status] : "미지원"}</dd></dl>
+  <dl class="kv" style="margin-top:10px"><dt>이메일</dt><dd>${esc(u.email)}</dd><dt>출생</dt><dd>${esc(u.birthYear)}년</dd><dt>민주평통</dt><dd>${esc(affiliationLabel(u))}</dd><dt>구분</dt><dd>${esc(u.memberType || "-")}</dd><dt>지역</dt><dd>${esc(u.region)}</dd><dt>소속</dt><dd>${esc(u.org || "-")}</dd><dt>연락처</dt><dd>${esc(u.phone || "-")}</dd><dt>참여</dt><dd>${u.mode === "online" ? "온라인" : "현장"}</dd><dt>사진 동의</dt><dd>${u.photoConsent ? "동의" : "미동의"}</dd><dt>심화</dt><dd>${d ? DEEP_STATUS[d.status] : "미지원"}</dd></dl>
   <h3 style="margin:14px 0 6px;font-size:.9rem">출결 (눌러서 수동 처리)</h3>
   <div class="row" style="gap:6px">${LECTURES.map(l => `<button class="dot ${att.includes(l.n) ? "done" : ""}" style="flex:1;border:0;cursor:pointer" data-man="${l.n}" aria-pressed="${att.includes(l.n)}" aria-label="${l.n}강 ${att.includes(l.n) ? "출석 취소" : "출석 처리"}">${l.n}</button>`).join("")}</div>
   <p class="small muted" style="margin:8px 0 0">휴대폰 분실, 중계 접속 확인 등 예외 상황에만 쓰세요. 처리한 운영진이 함께 기록돼요.</p>
@@ -940,6 +975,7 @@ const BIND = {
   people() {
     const q = $("#pq");
     q.oninput = () => { S.peopleQ = q.value; clearTimeout(q.t); q.t = setTimeout(() => { const pos = q.selectionStart; render(); const n = $("#pq"); n.focus(); n.setSelectionRange(pos, pos); }, 250); };
+    $("#pc").onchange = e => { S.peopleC = e.target.value; render(); };
     $$("[data-pf]").forEach(b => (b.onclick = () => { S.peopleF = b.dataset.pf; render(); }));
     $$("[data-user]").forEach(b => (b.onclick = () => userSheet(b.dataset.user)));
   },

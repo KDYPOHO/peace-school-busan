@@ -1,0 +1,20 @@
+{
+  "name": "peace-school-busan",
+  "version": "1.0.0",
+  "private": true,
+  "description": "부산 청년 평화학교 앱 (웹 + Android + iOS)",
+  "scripts": {
+    "serve": "npx http-server www -p 8080 -c-1",
+    "sync": "npx cap sync",
+    "android": "npx cap open android",
+    "ios": "npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.0",
+    "@capacitor/core": "^7.4.0",
+    "@capacitor/ios": "^7.4.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.0"
+  }
+}

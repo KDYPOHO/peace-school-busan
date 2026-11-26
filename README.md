@@ -46,6 +46,10 @@ android/  ios/       Capacitor로 만든 네이티브 앱 프로젝트
 
 강의 날짜·제목, 정원, 심화과정 일정, 지원 마감은 `www/js/config.js` 에 있습니다. 고쳐서 `main`에 올리면 웹은 몇 분 안에 자동 반영되고, 안드로이드 APK도 자동으로 다시 빌드됩니다.
 
+## 휴대폰에서 시험하기
+
+안드로이드 APK 바로 받기, 아이폰 설치(Xcode·TestFlight) 방법은 [docs/TESTING.md](docs/TESTING.md)에 있습니다.
+
 ## 안드로이드
 
 - `main`에 올릴 때마다 GitHub Actions가 **시험용 APK**를 만듭니다: 저장소 > Actions > 「안드로이드 앱 빌드」 > 최신 실행 > Artifacts.

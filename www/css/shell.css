@@ -50,3 +50,16 @@ html.large body{font-size:17px}
 .legal-d summary{cursor:pointer;color:var(--brand-2)}
 .check.all{border-bottom:1px solid var(--line);padding-bottom:8px}
 body.doc{overflow:auto;padding:24px max(16px,env(safe-area-inset-left,0px))!important;max-width:760px;margin:0 auto}
+
+/* 태블릿·아이패드·Mac: 넓은 화면에서는 카드 2열, 목록·대화·표는 한 줄 전체 */
+@media (min-width: 768px) {
+  .phone { max-width: none; }
+  .top { padding-left: max(24px, calc((100% - 1100px) / 2)); padding-right: max(24px, calc((100% - 1100px) / 2)); }
+  main { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; grid-auto-rows: max-content; gap: 16px;
+         padding: 20px max(24px, calc((100% - 1100px) / 2)) 24px; }
+  main > * { min-width: 0; }
+  main > .hero, main > :only-child, main > :last-child:nth-child(odd),
+  main > section:has(.list, .msg, .chat, form.composer, table, .scan, .cert, .kv) { grid-column: 1 / -1; }
+  nav.tabs { padding-left: max(24px, calc((100% - 760px) / 2)); padding-right: max(24px, calc((100% - 760px) / 2)); }
+  .auth { max-width: 520px; margin: 0 auto; }
+}

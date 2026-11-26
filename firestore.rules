@@ -30,7 +30,7 @@ service cloud.firestore {
         && request.resource.data.name.size() <= 40;
       allow update: if isStaff()
         || (signedIn() && uid == me()
-            && onlyChanges(['name', 'org', 'region', 'phone', 'mode', 'birthYear', 'updatedAt', 'largeText']));
+            && onlyChanges(['name', 'org', 'region', 'phone', 'mode', 'birthYear', 'updatedAt', 'largeText', 'optionalConsent', 'photoConsent', 'privacyVersion', 'termsVersion']));
       allow delete: if isStaff() || (signedIn() && uid == me());
     }
 
@@ -42,7 +42,9 @@ service cloud.firestore {
             && request.resource.data.uid == me()
             && request.resource.data.method == 'online'
             && id == string(request.resource.data.lecture) + '_' + me());
-      allow update, delete: if isStaff();
+      allow update: if isStaff();
+      // 탈퇴 시 본인 출결 파기 (개인정보 보호법 제21조)
+      allow delete: if isStaff() || (signedIn() && resource.data.uid == me());
     }
 
     // 심화과정 지원서 (문서 ID = 본인 uid)
@@ -51,7 +53,7 @@ service cloud.firestore {
       allow create: if signedIn() && uid == me() && request.resource.data.status == 'submitted';
       allow update: if isStaff()
         || (signedIn() && uid == me() && onlyChanges(['essay', 'arrival', 'updatedAt']));
-      allow delete: if isStaff() || (signedIn() && uid == me() && resource.data.status == 'submitted');
+      allow delete: if isStaff() || (signedIn() && uid == me());
     }
 
     // 공지 (모든 로그인 사용자 읽기, 운영진 쓰기)
@@ -65,7 +67,8 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.uid == me()
         && request.resource.data.text is string && request.resource.data.text.size() <= 500;
       allow read: if isStaff() || (signedIn() && resource.data.uid == me());
-      allow update, delete: if isStaff();
+      allow update: if isStaff();
+      allow delete: if isStaff() || (signedIn() && resource.data.uid == me());
     }
 
     // 해커톤 심사 점수 (운영진만)

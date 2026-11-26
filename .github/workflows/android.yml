@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths: ["www/**", "android/**", "capacitor.config.json", "package.json", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["www/**", "android/**", "capacitor.config.json", "package.json", ".github/workflows/android.yml"]
   workflow_dispatch:
 jobs:
   build:
@@ -12,7 +14,20 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: 21 }
+        with: { distribution: temurin, java-version: 21, cache: gradle }
+      - name: Maven Central 대신 Google 미러 사용 (GitHub 러너에서 429 오류 방지)
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/mirror.gradle <<'G'
+          def MIRROR = "https://maven-central.storage-download.googleapis.com/maven2/"
+          def swap = { RepositoryHandler repos ->
+            repos.withType(MavenArtifactRepository).configureEach { r ->
+              if (r.url.toString().startsWith("https://repo.maven.apache.org")) r.url = MIRROR
+            }
+          }
+          settingsEvaluated { s -> swap(s.pluginManagement.repositories) }
+          allprojects { p -> swap(p.buildscript.repositories); swap(p.repositories) }
+          G
       - run: npm ci
       - run: npx cap sync android
       - name: 디버그 APK 빌드 (휴대폰에 바로 설치해 시험용)

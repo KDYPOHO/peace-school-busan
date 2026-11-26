@@ -52,6 +52,10 @@ async function firebaseBackend() {
     async signOut() { await A.signOut(auth); },
     async deleteAccount() {
       const uid = api.user.uid;
+      // 개인정보 보호법 제21조: 탈퇴 시 본인 정보 지체 없이 파기
+      for (const c of ["attendance", "questions"]) {
+        try { const snap = await getDocs(query(collection(db, c), where("uid", "==", uid))); await Promise.all(snap.docs.map(d => deleteDoc(d.ref))); } catch (e) { console.warn(c, e); }
+      }
       try { await deleteDoc(doc(db, "deepApps", uid)); } catch (e) {}
       await deleteDoc(doc(db, "users", uid));
       await A.deleteUser(auth.currentUser);
@@ -141,7 +145,7 @@ function demoBackend() {
     async signUpEmail(email, pw) { return api.signInEmail(email, pw); },
     async resetPassword() {},
     async signOut() { D.me = null; api.user = null; save(); authCb && authCb(null); },
-    async deleteAccount() { delete D.users[D.me.uid]; delete D.deepApps[D.me.uid]; return api.signOut(); },
+    async deleteAccount() { for (const k of Object.keys(D.attendance)) if (D.attendance[k].uid === D.me.uid) delete D.attendance[k]; D.questions = D.questions.filter(q => q.uid !== D.me.uid); delete D.users[D.me.uid]; delete D.deepApps[D.me.uid]; return api.signOut(); },
     async isStaff() { return !!D.staff[api.user.uid]; },
     async getProfile() { return D.users[api.user.uid] || null; },
     async createProfile(p) { const data = { ...p, no: makeNo(), email: api.user.email, consent: true, consentAt: Date.now(), createdAt: Date.now() }; D.users[api.user.uid] = data; save(); return data; },

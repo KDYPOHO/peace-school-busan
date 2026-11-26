@@ -2,6 +2,7 @@
 import { APP, LECTURES, VENUE, PASS_COUNT, ONSITE_CAP, DEEP, TEAMS, CRITERIA, REGIONS, DEEP_APPLY_UNTIL, DEEP_STATUS } from "./config.js";
 import { createBackend, isNative } from "./backend.js";
 import { faqAnswer, FAQ_CHIPS } from "./faq.js";
+import { privacyHtml, termsHtml, permissionsHtml, consentTable, CONSENT_REQUIRED, CONSENT_OPTIONAL, CONSENT_PHOTO } from "./legal.js";
 
 /* ───────── 공통 도구 ───────── */
 const $ = s => document.querySelector(s);
@@ -260,11 +261,11 @@ function renderAuth() {
       </div>
     </section>
     ${B.mode === "demo" ? '<p class="note">체험 모드: 이 기기에만 저장돼요. 아무 이메일로나 들어가 볼 수 있어요.</p>' : ""}
-    <p class="note">로그인하면 <button class="btn ghost mini" id="pvBtn">개인정보 처리 안내</button>에 동의한 것으로 봅니다.</p>
+    <p class="note"><button class="btn ghost mini" id="pvBtn"><b>개인정보 처리방침</b></button> <button class="btn ghost mini" id="tmBtn">이용약관</button> <button class="btn ghost mini" id="pmBtn">앱 접근권한</button></p>
   </div>`;
   const err = m => ($("#aErr").textContent = m || "");
   $("#swBtn").onclick = () => { S.authMode = signup ? "login" : "signup"; renderAuth(); };
-  $("#pvBtn").onclick = privacySheet;
+  $("#pvBtn").onclick = privacySheet; $("#tmBtn").onclick = termsSheet; $("#pmBtn").onclick = permSheet;
   const rs = $("#rsBtn");
   rs && (rs.onclick = async () => {
     const em = $("#aEmail").value.trim();
@@ -285,18 +286,10 @@ function renderAuth() {
   };
 }
 
-function privacySheet() {
-  sheet(`<h2 style="margin:0 0 8px;font-size:1.05rem">개인정보 수집·이용 안내</h2>
-  <dl class="kv">
-    <dt>수집 기관</dt><dd>${esc(APP.org)}</dd>
-    <dt>목적</dt><dd>평화학교 수강 신청 확인, 출결 관리, 수료증 발급, 심화과정 선발, 공지 전달</dd>
-    <dt>항목</dt><dd>이름, 이메일, 출생연도, 거주 지역, 소속, 연락처, 참여 방식, 출결 기록, 심화과정 지원서</dd>
-    <dt>보관 기간</dt><dd>과정 종료 후 1년 (수료 확인용 이름·수강번호·수료 여부는 3년)</dd>
-    <dt>거부 권리</dt><dd>동의하지 않을 수 있으나, 이 경우 수강 신청이 어려워요.</dd>
-    <dt>삭제</dt><dd>내 정보 > 회원 탈퇴에서 언제든 지울 수 있어요.</dd>
-  </dl>
-  <p class="small muted" style="margin:10px 0 0">AI 도우미는 외부 AI 서비스에 내용을 보내지 않고 앱 안의 공식 안내문으로만 답해요. 문의 내용은 운영진만 볼 수 있어요. (안내 버전 ${esc(APP.privacyVersion)})</p>`);
-}
+function legalSheet(html) { sheet(`<div class="legal">${html}</div>`); }
+function privacySheet() { legalSheet(privacyHtml()); }
+function termsSheet() { legalSheet(termsHtml()); }
+function permSheet() { legalSheet(`<h1>앱 접근권한 안내</h1>${permissionsHtml()}`); }
 
 /* ───────── 수강 신청 (3단계) ───────── */
 function renderOnboard() {
@@ -318,7 +311,7 @@ function onboardCard() {
     <label class="f">이름<input id="oName" maxlength="40" autocomplete="name" value="${esc(d.name || (S.user.name || ""))}" required></label>
     <label class="f">출생연도<select id="oBirth"><option value="">선택</option>${Array.from({ length: by1 - by0 + 1 }, (_, i) => by1 - i).map(y => `<option ${+d.birthYear === y ? "selected" : ""}>${y}</option>`).join("")}</select></label>
     <p class="small muted" style="margin:-4px 0 0">대상: 만 19세~39세 청년 (${by0}~${by1}년생)</p>
-    <label class="f">휴대폰 번호<input id="oPhone" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000" value="${esc(d.phone || "")}"></label>`;
+    <label class="f">휴대폰 번호 (선택)<input id="oPhone" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000" value="${esc(d.phone || "")}"></label>`;
   else if (st === 1) body = `
     <h2 style="margin:0 0 4px">2. 소속과 참여 방식</h2><p class="small muted" style="margin:0 0 12px">전국 어디서나 참여할 수 있어요. 현장 정원은 ${ONSITE_CAP}명이에요.</p>
     <label class="f">거주 지역<select id="oRegion"><option value="">선택</option>${REGIONS.map(r => `<option ${d.region === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
@@ -329,9 +322,16 @@ function onboardCard() {
   else body = `
     <h2 style="margin:0 0 4px">3. 동의와 확인</h2><p class="small muted" style="margin:0 0 12px">아래 내용으로 신청해요.</p>
     <dl class="kv"><dt>이름</dt><dd>${esc(d.name)}</dd><dt>출생연도</dt><dd>${esc(d.birthYear)}년</dd><dt>지역</dt><dd>${esc(d.region)}</dd><dt>소속</dt><dd>${esc(d.org || "-")}</dd><dt>참여</dt><dd>${(d.mode || "onsite") === "online" ? "온라인" : "부산 현장"}</dd></dl>
-    <label class="check" style="margin-top:12px"><input type="checkbox" id="oC1"> (필수) 개인정보 수집·이용에 동의합니다. <button type="button" class="btn ghost mini" id="oPv">내용 보기</button></label>
-    <label class="check"><input type="checkbox" id="oC2"> (필수) 만 19세~39세 청년이며, 입력한 정보가 사실입니다.</label>
-    <label class="check"><input type="checkbox" id="oC3" ${d.photo ? "checked" : ""}> (선택) 행사 사진·영상에 얼굴이 나오는 것에 동의합니다.</label>`;
+    <label class="check all" style="margin-top:12px"><input type="checkbox" id="oAll"> <b>아래 내용에 모두 동의합니다</b></label>
+    <label class="check"><input type="checkbox" class="oc" id="oT"> [필수] 이용약관 동의 <button type="button" class="btn ghost mini" id="oTv">보기</button></label>
+    <label class="check"><input type="checkbox" class="oc" id="oC1"> [필수] 개인정보 수집·이용 동의</label>
+    <details class="legal-d"><summary>필수 동의 내용 보기</summary>${consentTable(CONSENT_REQUIRED)}</details>
+    <label class="check"><input type="checkbox" class="oc" id="oC2"> [필수] 만 19세~39세 청년이며, 입력한 정보가 사실입니다.</label>
+    <label class="check"><input type="checkbox" class="oc" id="oC4" ${d.opt ? "checked" : ""}> [선택] 휴대폰 번호·소속 수집·이용 동의</label>
+    <details class="legal-d"><summary>선택 동의 내용 보기</summary>${consentTable(CONSENT_OPTIONAL)}</details>
+    <label class="check"><input type="checkbox" class="oc" id="oC3" ${d.photo ? "checked" : ""}> [선택] 행사 사진·영상 촬영 및 활용 동의</label>
+    <details class="legal-d"><summary>사진 동의 내용 보기</summary>${consentTable(CONSENT_PHOTO)}</details>
+    <p class="small muted" style="margin:6px 0 0">선택 항목은 동의하지 않아도 신청과 모든 기능을 이용할 수 있어요. 국외 이전(로그인 인증 서버, 미국) 등 자세한 내용은 <button type="button" class="btn ghost mini" id="oPv">개인정보 처리방침</button>에 있어요.</p>`;
   return `<section class="card">${steps}<form class="form" id="obForm" novalidate>${body}
     <p class="err" id="oErr" role="alert"></p>
     <div class="row" style="gap:8px">${st > 0 ? '<button type="button" class="btn ghost" id="oBack">이전</button>' : ""}<button class="btn" style="flex:1" type="submit" id="oNext">${st < 2 ? "다음" : "신청 완료"}</button></div>
@@ -342,6 +342,9 @@ function bindOnboard() {
   const redraw = () => { const v = $("#view"); v.innerHTML = onboardCard(); bindOnboard(); };
   $$("[data-mode]").forEach(b => (b.onclick = () => { d.mode = b.dataset.mode; $$("[data-mode]").forEach(x => x.setAttribute("aria-pressed", x === b)); }));
   const pv = $("#oPv"); pv && (pv.onclick = e => { e.preventDefault(); privacySheet(); });
+  const tv = $("#oTv"); tv && (tv.onclick = e => { e.preventDefault(); termsSheet(); });
+  const all = $("#oAll"); all && (all.onchange = () => $$(".oc").forEach(c => (c.checked = all.checked)));
+  $$(".oc").forEach(c => (c.onchange = () => { all.checked = $$(".oc").every(x => x.checked); }));
   const back = $("#oBack"); back && (back.onclick = () => { S.onboardStep--; redraw(); });
   $("#obForm").onsubmit = async e => {
     e.preventDefault(); err();
@@ -354,11 +357,12 @@ function bindOnboard() {
       d.region = $("#oRegion").value; d.org = $("#oOrg").value.trim(); d.mode = d.mode || "onsite";
       if (!d.region) return err("거주 지역을 골라 주세요.");
     } else {
-      if (!$("#oC1").checked || !$("#oC2").checked) return err("필수 항목 두 가지에 동의해 주세요.");
-      d.photo = $("#oC3").checked;
+      if (!$("#oT").checked || !$("#oC1").checked || !$("#oC2").checked) return err("[필수] 항목 세 가지에 동의해 주세요.");
+      d.photo = $("#oC3").checked; d.opt = $("#oC4").checked;
       const btn = $("#oNext"); btn.disabled = true; btn.textContent = "신청 중…";
       try {
-        S.profile = await B.createProfile({ name: d.name, birthYear: +d.birthYear, phone: d.phone, region: d.region, org: d.org, mode: d.mode, photoConsent: d.photo, privacyVersion: APP.privacyVersion });
+        S.profile = await B.createProfile({ name: d.name, birthYear: +d.birthYear, phone: d.opt ? d.phone : "", region: d.region, org: d.opt ? d.org : "", mode: d.mode, optionalConsent: d.opt, photoConsent: d.photo, termsAgreed: true, privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion });
+        if (!d.opt && (d.phone || d.org)) setTimeout(() => toast("선택 동의를 하지 않아 휴대폰 번호와 소속은 저장하지 않았어요", 3600), 2800);
         S.draft = {}; S.onboardStep = 0; S.role = "p"; startProfileData();
         shell(); render("fwd");
         celebrate("수강 신청 완료", `수강번호 ${S.profile.no}`, "환영해요");
@@ -398,6 +402,7 @@ const VIEWS = {
       <div class="row between"><h2 style="margin:0">공지</h2><button class="btn ghost mini" id="allNoti">전체 보기</button></div>
       ${ns.length ? `<div class="list" style="margin-top:8px">${ns.map(n => `<div class="li"><div class="dot">${ic("send", 16)}</div><div class="body"><div class="small k">${esc(n.title)}</div><div class="small muted">${fmtTime(n.at)}</div></div></div>`).join("")}</div>` : '<p class="small muted" style="margin:8px 0 0">아직 공지가 없어요. 새 공지가 오면 종 모양에 점이 생겨요.</p>'}
     </section>
+    ${S.profile.privacyVersion !== APP.privacyVersion || S.profile.termsVersion !== APP.termsVersion ? `<section class="card"><div class="row between"><h2 style="margin:0">처리방침·약관이 바뀌었어요</h2><span class="pill p-warn">확인 필요</span></div><p class="small muted" style="margin:6px 0 10px">바뀐 내용을 확인해 주세요. 동의하지 않으면 내 정보에서 탈퇴할 수 있어요.</p><div class="row wrap" style="gap:8px"><button class="btn ghost mini" id="vPv">처리방침</button><button class="btn ghost mini" id="vTm">이용약관</button><button class="btn mini" id="vOk">확인했어요</button></div></section>` : ""}
     ${deepCard()}
     ${archiveCard()}`;
   },
@@ -466,8 +471,8 @@ const VIEWS = {
     return `
     <section class="card">
       <div class="row between"><h2 style="margin:0">${esc(p.name)}</h2><span class="pill p-gold">${esc(p.no)}</span></div>
-      <dl class="kv" style="margin-top:10px"><dt>이메일</dt><dd>${esc(p.email || S.user.email)}</dd><dt>지역</dt><dd>${esc(p.region)}</dd><dt>소속</dt><dd>${esc(p.org || "-")}</dd><dt>연락처</dt><dd>${esc(p.phone || "-")}</dd><dt>참여</dt><dd>${p.mode === "online" ? "온라인" : "부산 현장"}</dd></dl>
-      <button class="btn ghost block" style="margin-top:12px" id="editBtn">정보 수정</button>
+      <dl class="kv" style="margin-top:10px"><dt>이메일</dt><dd>${esc(p.email || S.user.email)}</dd><dt>지역</dt><dd>${esc(p.region)}</dd><dt>소속</dt><dd>${esc(p.org || "-")}</dd><dt>연락처</dt><dd>${esc(p.phone || "-")}</dd><dt>참여</dt><dd>${p.mode === "online" ? "온라인" : "부산 현장"}</dd><dt>선택 동의</dt><dd>연락처·소속 ${p.optionalConsent ? "동의" : "미동의"} · 사진 ${p.photoConsent ? "동의" : "미동의"}</dd></dl>
+      <button class="btn ghost block" style="margin-top:12px" id="editBtn">정보 수정 · 동의 변경</button>
     </section>
     <section class="card">
       <div class="row between"><h2 style="margin:0">수료증</h2>${issued ? '<span class="pill p-ok">발급 완료</span>' : ok ? '<span class="pill p-ok">발급 예정</span>' : '<span class="pill p-mute">미리보기</span>'}</div>
@@ -486,7 +491,7 @@ const VIEWS = {
     <section class="card">
       <h2>앱 정보</h2>
       <dl class="kv"><dt>버전</dt><dd>${esc(APP.version)}${isNative ? " (앱)" : " (웹)"}${B.mode === "demo" ? " · 체험 모드" : ""}</dd><dt>운영</dt><dd>${esc(APP.contact)}</dd><dt>계정 ID</dt><dd><code style="font-size:.75rem">${esc(S.user.uid)}</code> <button class="btn ghost mini" id="cpUid">복사</button></dd></dl>
-      <div class="row wrap" style="gap:8px;margin-top:12px"><button class="btn ghost mini" id="pvBtn2">개인정보 처리 안내</button><button class="btn ghost mini" id="outBtn">로그아웃</button><button class="btn ghost mini" id="delBtn" style="color:var(--bad)">회원 탈퇴</button></div>
+      <div class="row wrap" style="gap:8px;margin-top:12px"><button class="btn ghost mini" id="pvBtn2"><b>개인정보 처리방침</b></button><button class="btn ghost mini" id="tmBtn2">이용약관</button><button class="btn ghost mini" id="pmBtn2">앱 접근권한</button><button class="btn ghost mini" id="dlBtn">내 정보 내려받기</button><button class="btn ghost mini" id="outBtn">로그아웃</button><button class="btn ghost mini" id="delBtn" style="color:var(--bad)">회원 탈퇴</button></div>
     </section>`;
   },
 
@@ -683,17 +688,21 @@ function printCert(p) {
   setTimeout(() => { try { window.print(); } catch (e) { toast("이 기기에서는 인쇄를 열 수 없어요. 화면을 캡처해 보관해 주세요."); } }, 50);
 }
 function editProfileSheet() {
-  const p = S.profile;
+  const p = S.profile; let confirmedOpt = false;
   sheet(`<h2 style="margin:0 0 10px;font-size:1.05rem">정보 수정</h2><form class="form" id="pf">
     <label class="f">이름 (수료증 표기)<input id="eName" maxlength="40" value="${esc(p.name)}" required></label>
+    <label class="check"><input type="checkbox" id="eOpt" ${p.optionalConsent ? "checked" : ""}> [선택] 휴대폰 번호·소속 수집·이용 동의 (끄면 두 정보가 즉시 지워져요)</label>
     <label class="f">소속<input id="eOrg" maxlength="40" value="${esc(p.org || "")}"></label>
     <label class="f">거주 지역<select id="eRegion">${REGIONS.map(r => `<option ${p.region === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
     <label class="f">휴대폰 번호<input id="ePhone" inputmode="tel" value="${esc(p.phone || "")}"></label>
+    <label class="check"><input type="checkbox" id="ePhoto" ${p.photoConsent ? "checked" : ""}> [선택] 행사 사진·영상 촬영 및 활용 동의</label>
     <label class="f">참여 방식<select id="eMode"><option value="onsite" ${p.mode !== "online" ? "selected" : ""}>부산 현장</option><option value="online" ${p.mode === "online" ? "selected" : ""}>온라인</option></select></label>
     <p class="err" id="eErr" role="alert"></p><button class="btn" type="submit">저장</button></form>`);
   $("#pf").onsubmit = async e => {
     e.preventDefault();
-    const d = { name: $("#eName").value.trim(), org: $("#eOrg").value.trim(), region: $("#eRegion").value, phone: $("#ePhone").value.trim(), mode: $("#eMode").value };
+    const opt = $("#eOpt").checked;
+    const d = { name: $("#eName").value.trim(), org: opt ? $("#eOrg").value.trim() : "", region: $("#eRegion").value, phone: opt ? $("#ePhone").value.trim() : "", mode: $("#eMode").value, optionalConsent: opt, photoConsent: $("#ePhoto").checked };
+    if (!opt && ($("#eOrg").value.trim() || $("#ePhone").value.trim()) && !confirmedOpt) { confirmedOpt = true; return ($("#eErr").textContent = "선택 동의를 끄면 휴대폰 번호와 소속이 지워져요. 맞으면 저장을 한 번 더 눌러 주세요."); }
     if (!d.name) return ($("#eErr").textContent = "이름을 적어 주세요.");
     if (d.phone && !/^01[016789]-?\d{3,4}-?\d{4}$/.test(d.phone)) return ($("#eErr").textContent = "휴대폰 번호 형식을 확인해 주세요.");
     try { await B.updateProfile(d); Object.assign(S.profile, d); closeSheet(); render(); toast("저장했어요"); }
@@ -735,12 +744,12 @@ function rankRows() {
   return rows.map((r, k) => `<tr data-team="${r.i}"><td><span class="rank ${k === 0 && r.k ? "g1" : ""}">${k + 1}</span></td><td>${esc(r.t)}${J.round === "예선" && k < 4 && r.k ? ' <span class="pill p-ok">본선</span>' : ""}</td><td class="r num">${r.k}</td><td class="r num">${r.k ? r.avg.toFixed(1) : "-"}</td></tr>`).join("");
 }
 function csvExport() {
-  const head = ["수강번호", "이름", "이메일", "출생연도", "지역", "소속", "연락처", "참여방식", ...LECTURES.map(l => `${l.n}강`), "출석 수", "수료", "심화 지원", "심화 결과", "사진 동의", "신청일"];
+  const head = ["수강번호", "이름", "이메일", "출생연도", "지역", "소속", "연락처", "참여방식", ...LECTURES.map(l => `${l.n}강`), "출석 수", "수료", "심화 지원", "심화 결과", "선택 동의", "사진 동의", "신청일"];
   const lines = [head];
   S.users.forEach(u => {
     const att = attOf(u.uid), d = S.deepApps.find(a => a.uid === u.uid);
     const m = l => { const r = S.allAtt.find(a => a.uid === u.uid && a.lecture === l.n); return r ? (r.method === "online" ? "온라인" : r.method === "manual" ? "수동" : "현장") : ""; };
-    lines.push([u.no, u.name, u.email, u.birthYear, u.region, u.org, u.phone, u.mode === "online" ? "온라인" : "현장", ...LECTURES.map(m), att.length, att.length >= PASS_COUNT ? "Y" : "N", d ? "Y" : "N", d ? DEEP_STATUS[d.status] || "" : "", u.photoConsent ? "Y" : "N", u.createdAt ? fmtTime(u.createdAt) : ""]);
+    lines.push([u.no, u.name, u.email, u.birthYear, u.region, u.org, u.phone, u.mode === "online" ? "온라인" : "현장", ...LECTURES.map(m), att.length, att.length >= PASS_COUNT ? "Y" : "N", d ? "Y" : "N", d ? DEEP_STATUS[d.status] || "" : "", u.optionalConsent ? "Y" : "N", u.photoConsent ? "Y" : "N", u.createdAt ? fmtTime(u.createdAt) : ""]);
   });
   const csv = "﻿" + lines.map(r => r.map(v => { v = String(v ?? ""); if (/^[=+\-@]/.test(v)) v = "'" + v; return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; }).join(",")).join("\r\n");
   const name = `평화학교_참가자_${todayStr()}.csv`;
@@ -780,6 +789,15 @@ ${LECTURES.map(l => { const k = S.allAtt.filter(a => a.lecture === l.n); return 
   sheet(`<h2 style="margin:0 0 6px;font-size:1.05rem">결과보고서 초안</h2><p class="small muted" style="margin:0 0 10px">앱에 쌓인 숫자로 채운 초안이에요. 복사해서 한글 문서에 붙여 넣으세요.</p><textarea id="rpt" rows="16" style="width:100%;font-size:.8rem;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--surface)">${esc(t)}</textarea><button class="btn block" style="margin-top:10px" id="cpRpt">복사</button>`);
   $("#cpRpt").onclick = () => copyText(t, "복사했어요", $("#rpt"));
 }
+async function myDataExport() {
+  const data = { 안내: `${APP.org} ${APP.name} 개인정보 열람 (개인정보 보호법 제35조)`, 내려받은_시각: fmtTime(Date.now()), 계정: { id: S.user.uid, 이메일: S.user.email }, 신청서: S.profile, 출결: S.myAtt.map(a => ({ 강: a.lecture, 방식: a.method, 일시: fmtTime(a.at) })), 심화과정_지원서: S.deepApp, 문의: S.myQs.map(q => ({ 내용: q.text, 답변: q.answer || "", 일시: fmtTime(q.at) })) };
+  const json = JSON.stringify(data, (k, v) => (v && typeof v === "object" && typeof v.toMillis === "function" ? fmtTime(v.toMillis()) : v), 2);
+  try {
+    const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+    const a = document.createElement("a"); a.href = url; a.download = `내정보_${todayStr()}.json`; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000); toast("내 정보를 내려받았어요");
+  } catch (e) { sheet(`<h2 style="margin:0 0 6px;font-size:1.05rem">내 정보</h2><textarea id="myj" rows="14" style="width:100%;font-size:.75rem">${esc(json)}</textarea>`); }
+}
 async function copyText(t, msg, el) {
   try { await navigator.clipboard.writeText(t); toast(msg); }
   catch (e) { if (el) { el.focus(); el.select(); } toast("길게 눌러 직접 복사해 주세요"); }
@@ -806,6 +824,11 @@ function userSheet(uid) {
 let scanner = null, lastCode = "", lastAt = 0;
 function loadScript(src) { return new Promise((res, rej) => { if ([...document.scripts].some(s => s.src === src)) return res(); const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
 async function startScanner() {
+  if (!LS.get("camNotice", false)) {
+    sheet(`<h2 style="margin:0 0 6px;font-size:1.05rem">카메라 접근권한 안내</h2><p class="small" style="margin:0 0 8px"><b>[선택] 카메라</b>: 참가자 QR 수강증을 찍어 출석을 기록할 때만 사용해요. 영상은 저장하거나 전송하지 않아요.</p><p class="small muted" style="margin:0 0 12px">허용하지 않아도 수강번호 직접 입력으로 출석 처리를 할 수 있어요. 허용은 휴대폰 설정에서 언제든 철회할 수 있어요.</p><button class="btn block" id="camOk">확인하고 카메라 켜기</button>`);
+    $("#camOk").onclick = () => { LS.set("camNotice", true); closeSheet(); startScanner(); };
+    return;
+  }
   const btn = $("#camBtn"); btn.disabled = true; btn.textContent = "카메라 준비 중…";
   try {
     await loadScript("https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js");
@@ -860,6 +883,8 @@ const PARTIAL = {
 const BIND = {
   home() {
     $("#allNoti").onclick = openNotices;
+    const vOk = $("#vOk");
+    if (vOk) { $("#vPv").onclick = privacySheet; $("#vTm").onclick = termsSheet; vOk.onclick = async () => { try { await B.updateProfile({ privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion }); Object.assign(S.profile, { privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion }); render(); } catch (e) { toast("저장하지 못했어요"); } }; }
     const a = $("#applyBtn"); a && (a.onclick = deepForm);
     const e = $("#editDeep"); e && (e.onclick = deepForm);
   },
@@ -891,10 +916,10 @@ const BIND = {
     $("#lgT").onchange = e => { LS.set("large", e.target.checked); applyPrefs(); };
     $$("[data-theme-set]").forEach(b => (b.onclick = () => { LS.set("theme", b.dataset.themeSet); applyPrefs(); render(); }));
     $("#cpUid").onclick = () => copyText(S.user.uid, "계정 ID를 복사했어요");
-    $("#pvBtn2").onclick = privacySheet;
+    $("#pvBtn2").onclick = privacySheet; $("#tmBtn2").onclick = termsSheet; $("#pmBtn2").onclick = permSheet; $("#dlBtn").onclick = myDataExport;
     $("#outBtn").onclick = async () => { if (await confirmSheet("로그아웃할까요?", "다시 들어오려면 이메일과 비밀번호가 필요해요.", "로그아웃")) B.signOut(); };
     $("#delBtn").onclick = async () => {
-      if (!(await confirmSheet("회원 탈퇴할까요?", "신청서, 심화 지원서, 계정이 지워지고 되돌릴 수 없어요. 이미 기록된 출결은 운영 기록으로 과정 종료 후 1년까지 보관돼요.", "탈퇴하기", true))) return;
+      if (!(await confirmSheet("회원 탈퇴할까요?", "계정, 수강 신청서, 출결 기록, 문의, 심화 지원서가 즉시 지워지고 되돌릴 수 없어요. 수료 요건과 수료증도 함께 사라져요.", "탈퇴하기", true))) return;
       try { await B.deleteAccount(); toast("탈퇴했어요. 그동안 고마웠어요."); }
       catch (e) { toast(authMsg(e), 4000); }
     };

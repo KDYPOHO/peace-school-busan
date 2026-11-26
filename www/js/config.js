@@ -16,9 +16,11 @@ export const firebaseConfig = {
 export const APP = {
   name: "부산 청년 평화학교",
   org: "민주평화통일자문회의 부산지역회의",
-  version: "1.0.0",
+  version: "1.1.0",
   year: 2027,
-  privacyVersion: "2027-01",
+  privacyVersion: "2027-01",          // 개인정보 처리방침 버전 (바꾸면 재동의 안내)
+  termsVersion: "2027-01",            // 이용약관 버전
+  legalEffective: "2027-01-01",       // 처리방침·약관 시행일
   archiveUrl: "https://youtharchive.kr/",
   contact: "민주평통 부산지역회의 사무처"
 };
@@ -52,3 +54,12 @@ export const CRITERIA = [
 export const REGIONS = ["서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주", "해외"];
 export const DEEP_APPLY_UNTIL = "2027-06-20"; // 심화과정 지원 마감 (KST)
 export const DEEP_STATUS = { submitted: "검토 중", selected: "선발", waitlist: "예비 선발", rejected: "미선발" };
+
+// 개인정보 보호책임자 (개인정보 보호법 제31조) — 사무처 확정 후 반드시 실제 정보로 바꾸세요
+export const PRIVACY_OFFICER = {
+  title: "개인정보 보호책임자",
+  name: "(사무처 확정 후 기재)",
+  dept: "민주평화통일자문회의 부산지역회의 사무처",
+  phone: "(대표 전화 확정 후 기재)",
+  email: "(대표 이메일 확정 후 기재)"
+};

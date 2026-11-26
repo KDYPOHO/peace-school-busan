@@ -16,12 +16,15 @@ export const firebaseConfig = {
 export const APP = {
   name: "부산 청년 평화학교",
   org: "민주평화통일자문회의 부산지역회의",
-  version: "1.2.0",
+  version: "1.2.1",
   year: 2027,
   privacyVersion: "2027-01",          // 개인정보 처리방침 버전 (바꾸면 재동의 안내)
   termsVersion: "2027-01",            // 이용약관 버전
   legalEffective: "2027-01-01",       // 처리방침·약관 시행일
   archiveUrl: "https://youtharchive.kr/",
+  // 시험용 앱 설치 링크 (안드로이드 APK는 main에 올릴 때마다 자동 갱신)
+  androidApk: "https://github.com/KDYPOHO/peace-school-busan/releases/download/test-latest/peace-school.apk",
+  testGuide: "https://github.com/KDYPOHO/peace-school-busan/blob/main/docs/TESTING.md",
   contact: "민주평통 부산지역회의 사무처"
 };
 

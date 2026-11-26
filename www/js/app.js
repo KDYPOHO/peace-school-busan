@@ -507,6 +507,10 @@ const VIEWS = {
     </section>
     ${archiveCard()}
     <section class="card">
+      ${isNative ? "" : `<h2>휴대폰 앱으로 시험하기</h2>
+      <p class="small muted" style="margin:0 0 8px">안드로이드는 아래 파일을 받아 설치하면 돼요. 아이폰은 운영진이 TestFlight로 초대해 드려요.</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><a class="btn mini" href="${esc(APP.androidApk)}" target="_blank" rel="noopener">안드로이드 APK 받기</a><a class="btn ghost mini" href="${esc(APP.testGuide)}" target="_blank" rel="noopener">설치 방법</a></div>
+      <hr style="border:0;border-top:1px solid var(--line, #e5e7eb);margin:14px 0">`}
       <h2>앱 정보</h2>
       <dl class="kv"><dt>버전</dt><dd>${esc(APP.version)}${isNative ? " (앱)" : " (웹)"}${B.mode === "demo" ? " · 체험 모드" : ""}</dd><dt>운영</dt><dd>${esc(APP.contact)}</dd><dt>계정 ID</dt><dd><code style="font-size:.75rem">${esc(S.user.uid)}</code> <button class="btn ghost mini" id="cpUid">복사</button></dd></dl>
       <div class="row wrap" style="gap:8px;margin-top:12px"><button class="btn ghost mini" id="pvBtn2"><b>개인정보 처리방침</b></button><button class="btn ghost mini" id="tmBtn2">이용약관</button><button class="btn ghost mini" id="pmBtn2">앱 접근권한</button><button class="btn ghost mini" id="dlBtn">내 정보 내려받기</button><button class="btn ghost mini" id="outBtn">로그아웃</button><button class="btn ghost mini" id="delBtn" style="color:var(--bad)">회원 탈퇴</button></div>

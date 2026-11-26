@@ -1,0 +1,81 @@
+rules_version = '2';
+// 부산 청년 평화학교 앱 보안 규칙
+// - 참가자: 본인 신청서·출결·심화 지원서만 읽고 쓸 수 있음
+// - 운영진(staff 컬렉션에 등록된 계정): 전체 조회, 출석 처리, 공지, 심사, 선발
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function isStaff() {
+      return signedIn() && exists(/databases/$(database)/documents/staff/$(me()));
+    }
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // 운영진 명단 (문서 ID = 운영진 uid)
+    match /staff/{uid} {
+      allow read: if signedIn() && (uid == me() || isStaff());
+      allow write: if isStaff();
+    }
+
+    // 참가자 신청서 / 프로필 (문서 ID = 본인 uid)
+    match /users/{uid} {
+      allow read: if signedIn() && (uid == me() || isStaff());
+      allow create: if signedIn() && uid == me()
+        && request.resource.data.consent == true
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 40;
+      allow update: if isStaff()
+        || (signedIn() && uid == me()
+            && onlyChanges(['name', 'org', 'region', 'phone', 'mode', 'birthYear', 'updatedAt', 'largeText']));
+      allow delete: if isStaff() || (signedIn() && uid == me());
+    }
+
+    // 출결 (문서 ID = "{강}_{uid}")
+    match /attendance/{id} {
+      allow read: if isStaff() || (signedIn() && resource.data.uid == me());
+      allow create: if isStaff()
+        || (signedIn()
+            && request.resource.data.uid == me()
+            && request.resource.data.method == 'online'
+            && id == string(request.resource.data.lecture) + '_' + me());
+      allow update, delete: if isStaff();
+    }
+
+    // 심화과정 지원서 (문서 ID = 본인 uid)
+    match /deepApps/{uid} {
+      allow read: if isStaff() || (signedIn() && uid == me());
+      allow create: if signedIn() && uid == me() && request.resource.data.status == 'submitted';
+      allow update: if isStaff()
+        || (signedIn() && uid == me() && onlyChanges(['essay', 'arrival', 'updatedAt']));
+      allow delete: if isStaff() || (signedIn() && uid == me() && resource.data.status == 'submitted');
+    }
+
+    // 공지 (모든 로그인 사용자 읽기, 운영진 쓰기)
+    match /notices/{id} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    // 학습 도우미가 답하지 못한 질문 → 운영진 문의함
+    match /questions/{id} {
+      allow create: if signedIn() && request.resource.data.uid == me()
+        && request.resource.data.text is string && request.resource.data.text.size() <= 500;
+      allow read: if isStaff() || (signedIn() && resource.data.uid == me());
+      allow update, delete: if isStaff();
+    }
+
+    // 해커톤 심사 점수 (운영진만)
+    match /scores/{id} {
+      allow read, write: if isStaff();
+    }
+
+    // 그 밖의 모든 경로는 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

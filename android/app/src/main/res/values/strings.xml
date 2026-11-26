@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">평화학교</string>
+    <string name="title_activity_main">평화학교</string>
+    <string name="package_name">kr.busan.peaceschool</string>
+    <string name="custom_url_scheme">kr.busan.peaceschool</string>
+</resources>

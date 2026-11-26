@@ -18,8 +18,14 @@ async function firebaseBackend() {
     import(FB + "firebase-firestore.js")
   ]);
   const app = initializeApp(firebaseConfig);
-  const auth = A.getAuth(app);
-  try { await A.setPersistence(auth, A.browserLocalPersistence); } catch (e) {}
+  // iOS 앱 웹뷰(capacitor://)에서는 getAuth()가 멈추는 알려진 문제가 있어 앱일 때는 initializeAuth를 씀
+  let auth;
+  if (isNative) {
+    auth = A.initializeAuth(app, { persistence: [A.indexedDBLocalPersistence, A.inMemoryPersistence] });
+  } else {
+    auth = A.getAuth(app);
+    try { await A.setPersistence(auth, A.browserLocalPersistence); } catch (e) {}
+  }
   auth.languageCode = "ko";
   const db = F.initializeFirestore(app, { localCache: F.persistentLocalCache ? F.persistentLocalCache() : undefined });
   const { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocs, serverTimestamp, addDoc } = F;

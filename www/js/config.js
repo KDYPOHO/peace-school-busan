@@ -16,7 +16,7 @@ export const firebaseConfig = {
 export const APP = {
   name: "부산 청년 평화학교",
   org: "민주평화통일자문회의 부산지역회의",
-  version: "1.1.0",
+  version: "1.1.1",
   year: 2027,
   privacyVersion: "2027-01",          // 개인정보 처리방침 버전 (바꾸면 재동의 안내)
   termsVersion: "2027-01",            // 이용약관 버전
@@ -58,8 +58,8 @@ export const DEEP_STATUS = { submitted: "검토 중", selected: "선발", waitli
 // 개인정보 보호책임자 (개인정보 보호법 제31조) — 사무처 확정 후 반드시 실제 정보로 바꾸세요
 export const PRIVACY_OFFICER = {
   title: "개인정보 보호책임자",
-  name: "(사무처 확정 후 기재)",
+  name: "강동엽",
   dept: "민주평화통일자문회의 부산지역회의 사무처",
-  phone: "(대표 전화 확정 후 기재)",
-  email: "(대표 이메일 확정 후 기재)"
+  phone: "(사무처 대표 전화 확정 후 기재)",
+  email: "todaklife@gmail.com"
 };

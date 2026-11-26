@@ -34,7 +34,7 @@ service cloud.firestore {
         || (signedIn() && uid == me()
             && onlyChanges(['name', 'org', 'region', 'phone', 'mode', 'birthYear', 'updatedAt', 'largeText', 'optionalConsent', 'photoConsent', 'privacyVersion', 'termsVersion', 'orgRegion', 'orgCouncil', 'memberType', 'memberTerm', 'memberNo', 'memberVerified'])
             && (request.resource.data.get('memberVerified', '') == resource.data.get('memberVerified', '')
-                || request.resource.data.get('memberVerified', '') in ['', 'pending'])));
+                || request.resource.data.get('memberVerified', '') in ['', 'pending']));
       allow delete: if isStaff() || (signedIn() && uid == me());
     }
 

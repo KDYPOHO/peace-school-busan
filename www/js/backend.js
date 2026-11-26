@@ -104,6 +104,7 @@ async function firebaseBackend() {
       return onSnapshot(collection(db, "users"), s => cb(rows(s).map(r => ({ ...r, uid: r.id, createdAt: toMs(r.createdAt) }))), () => cb([]));
     },
     async getUser(uid) { const s = await getDoc(doc(db, "users", uid)); return s.exists() ? { uid, ...s.data() } : null; },
+    async setMemberVerified(uid, v) { await updateDoc(doc(db, "users", uid), { memberVerified: v, verifiedBy: api.user.uid, verifiedAt: ts() }); },
 
     async getDeepApp() { const s = await getDoc(doc(db, "deepApps", api.user.uid)); return s.exists() ? s.data() : null; },
     async submitDeepApp(d) { await setDoc(doc(db, "deepApps", api.user.uid), { ...d, uid: api.user.uid, status: "submitted", at: ts() }); },
@@ -163,6 +164,7 @@ function demoBackend() {
     watchAllAttendance(cb) { return sub(() => cb(Object.entries(D.attendance).map(([id, a]) => ({ id, ...a })))); },
     watchUsers(cb) { return sub(() => cb(Object.entries(D.users).map(([uid, u]) => ({ uid, ...u })))); },
     async getUser(uid) { return D.users[uid] ? { uid, ...D.users[uid] } : null; },
+    async setMemberVerified(uid, v) { Object.assign(D.users[uid], { memberVerified: v, verifiedBy: api.user.uid, verifiedAt: Date.now() }); save(); },
     async getDeepApp() { return D.deepApps[api.user.uid] || null; },
     async submitDeepApp(d) { D.deepApps[api.user.uid] = { ...d, uid: api.user.uid, status: "submitted", at: Date.now() }; save(); },
     async updateDeepApp(d) { Object.assign(D.deepApps[api.user.uid], d); save(); },

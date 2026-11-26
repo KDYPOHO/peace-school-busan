@@ -27,10 +27,14 @@ service cloud.firestore {
         && request.resource.data.consent == true
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
-        && request.resource.data.name.size() <= 40;
+        && request.resource.data.name.size() <= 40
+        // 자문위원 인증은 운영진만: 본인은 '인증 대기'까지만 쓸 수 있음
+        && request.resource.data.get('memberVerified', '') in ['', 'pending'];
       allow update: if isStaff()
         || (signedIn() && uid == me()
-            && onlyChanges(['name', 'org', 'region', 'phone', 'mode', 'birthYear', 'updatedAt', 'largeText', 'optionalConsent', 'photoConsent', 'privacyVersion', 'termsVersion', 'orgRegion', 'orgCouncil', 'memberType']));
+            && onlyChanges(['name', 'org', 'region', 'phone', 'mode', 'birthYear', 'updatedAt', 'largeText', 'optionalConsent', 'photoConsent', 'privacyVersion', 'termsVersion', 'orgRegion', 'orgCouncil', 'memberType', 'memberTerm', 'memberNo', 'memberVerified'])
+            && (request.resource.data.get('memberVerified', '') == resource.data.get('memberVerified', '')
+                || request.resource.data.get('memberVerified', '') in ['', 'pending']));
       allow delete: if isStaff() || (signedIn() && uid == me());
     }
 

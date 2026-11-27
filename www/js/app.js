@@ -144,6 +144,7 @@ function render(anim) {
   nav.style.gridTemplateColumns = `repeat(${tabs.length},1fr)`;
   nav.innerHTML = '<span class="ind"></span>' + tabs.map(([k, l, i]) => `<button data-tab="${k}" ${k === cur ? 'aria-current="page"' : ""}>${ic(i)}<span>${l}</span></button>`).join("");
   const v = $("#view");
+  v.dataset.view = cur;
   if (S.role === "p") updateInquiryBadge(cur === "ai");
   if (S.role === "p" && !S.profile) v.innerHTML = onboardCard();
   else v.innerHTML = VIEWS[cur]();
@@ -671,7 +672,7 @@ const VIEWS = {
       <p class="scan-result small" id="scanResult" role="status" aria-live="polite" hidden></p>
       <form class="composer" id="manualForm"><input id="manualNo" maxlength="24" required placeholder="수강번호 (예: BS27-AB12CD)" autocomplete="off" autocapitalize="characters" aria-label="수강번호"><button class="btn ghost" type="submit">직접 출석</button></form>
     </section>
-    <section class="card"><h2>최근 출석</h2><div class="list small" id="recent"></div></section>`;
+    <section class="card scan-recent"><h2>최근 출석</h2><div class="list small" id="recent"></div></section>`;
   },
   noti() {
     const open = S.questions.filter(q => !q.answer).sort((a, b) => a.at - b.at);
@@ -1125,7 +1126,10 @@ const BIND = {
         if (S.user?.uid !== uid) return;
         if (S.helpDraft.trim() === text) {
           S.helpDraft = "";
-          if (field.value.trim() === text) field.value = "";
+          if (field.value.trim() === text) {
+            field.value = "";
+            field.blur();
+          }
         }
         toast("문의가 접수됐어요. 내 문의에서 답변을 확인할 수 있어요.");
       } catch {

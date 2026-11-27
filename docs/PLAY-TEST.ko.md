@@ -8,6 +8,12 @@
 2. iOS를 빌드할 때 `npm ci`와 `npx cap sync ios` 후 Xcode의 `App` 스킴을 사용한다. Android APK, AAB 및 iOS의 `App.app/public` 모두에 `python3 scripts/verify_web_assets.py <경로>`를 실행해 공통 파일을 비교한다.
 3. 실제 기기에서는 별도 시험 Firebase로 신청과 출결 동기화, 로그인, QR 권한 허용·거절·재요청, 수강번호 입력, 재시작, 탈퇴를 확인한다. 가상 정보만 사용하고 기기·OS·앱 빌드·커밋을 기록한다.
 
+## 휴대폰·태블릿·Mac 화면 확인
+
+- iPhone과 iPad는 같은 iOS 빌드를 설치한다. iPad 세로·가로와 좁은 창에서 문의 작성과 답변 목록, 운영진의 QR·수강번호 입력·최근 출석을 확인한다.
+- Android 휴대폰과 태블릿은 같은 AAB를 사용한다. 태블릿 세로·가로에서 카메라가 한 화면만 보이는지 확인한다.
+- Apple Silicon Mac에서 iPad 앱으로 테스트할 때는 TestFlight 그룹의 Mac 테스트 조건을 확인한다. Mac 카메라 접근과 수강번호 대체 입력은 별도로 시험한다. Intel Mac에서는 웹을 사용할 수 있다. [Apple Silicon Mac 앱 가용성](https://developer.apple.com/help/app-store-connect/manage-your-apps-availability/manage-availability-of-iphone-and-ipad-apps-on-macs-with-apple-silicon/)
+
 ## 업로드 서명
 
 Play Console에서 패키지와 사용 중인 업로드 인증서를 확인한다. 호환되는 업로드 키를 로컬 비밀 저장소에서 관리하고 다음 환경 변수를 로컬 프로세스에 주입한다.

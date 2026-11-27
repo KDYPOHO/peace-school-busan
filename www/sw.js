@@ -1,5 +1,5 @@
 // 앱 껍데기만 캐시 (데이터는 Firebase가 처리). 새 버전은 다음 실행 때 반영.
-const C = "psb-v1.3.1-glass";
+const C = "psb-v1.3.1-tablet";
 const SHELL = ["./", "index.html", "css/app.css", "css/shell.css", "js/app.js", "js/backend.js", "js/account-deletion.js", "js/config.js", "js/course.js", "js/faq.js", "js/legal.js", "js/councils.js", "privacy.html", "terms.html", "img/symbol.png", "img/puac-signature-ko.jpg", "img/icon-192.png", "manifest.webmanifest"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(C).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

@@ -54,6 +54,8 @@ Galaxy Tab S8 실기기(Android 14·가로 화면)에서도 같은 Android 시�
 
 iPhone SE 3 실기기(iOS 26.3)는 Apple 시험 빌드 16의 가입 승인 검사를 통과했다. 승인 대기 계정에서 과정 메뉴가 차단됐고 Android에서 승인한 같은 시험 계정으로 로그인하자 출석 메뉴와 QR 수강증이 표시됐다. 시험 Firebase에서 두 계정의 기기 검사 중 로그인과 승인 상태를 대조했다. [iPhone SE 3 가입 승인 검사](https://console.firebase.google.com/project/hanbando-peace-school-qa/testlab/histories/bh.4c2fdb24b53056aa/matrices/5434270454064507452)
 
+Apple Silicon Mac(`Mac15,3`, macOS 27.2.1)에서 Apple 시험 빌드 16을 Xcode의 iPad 호환 모드로 실행했다. Mac에서 직접 실행된 앱의 WebView로 승인 대기 화면과 과정 차단을 확인했다. 시험 운영진의 승인 시각부터 약 69초 뒤 같은 로그인 상태에서 출석 메뉴와 QR 수강증, 수강번호 복사 버튼이 표시됐다. Xcode가 이 실행 모드의 UI 테스트를 지원하지 않아 임시 시험 코드로 WebView를 검사했다. 실제 실행 앱의 공통 파일 27개는 Apple 시험 IPA와 일치했다.
+
 ### 운영 Firebase 전환 확인
 
 2026년 11월 27일 Busan Peace School(`kdypoho`)에 적용 중인 Firestore 규칙은 소스 커밋 `4d7037b58bbf0323aa090a8b815971c1ceb909e9`의 규칙과 일치했다. 해당 규칙으로 개발 에뮬레이터에 기존 참가자·문의·출석·공지 시험 데이터를 만든 뒤 가입 승인 규칙으로 교체했다. 기존 참가자가 네 가지 기록을 계속 읽을 수 있었고, 예전 앱 방식의 신규 가입은 거절됐다. 새 방식으로 신청한 참가자는 운영진이 승인한 뒤 공지를 열 수 있었다.

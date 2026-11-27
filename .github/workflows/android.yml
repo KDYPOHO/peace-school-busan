@@ -34,6 +34,12 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run test:firebase
+      - name: Chromium과 WebKit의 교차 흐름 검사
+        timeout-minutes: 6
+        run: |
+          npx playwright install --with-deps chromium webkit
+          PSB_BUILD_MODE=development npm run build:web
+          npm run test:browser
       - name: Firebase 설정을 포함한 공통 자산 생성
         env:
           PSB_BUILD_MODE: ${{ github.ref == 'refs/heads/main' && 'production' || (vars.PSB_STAGING_PROJECT_ID && 'staging' || 'development') }}

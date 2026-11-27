@@ -59,11 +59,15 @@ public class AppLaunchTest {
                 document.querySelector('#attendanceHelp').click();
                 document.querySelector('#helpText').value = '강의 출석을 확인해 주세요.';
                 document.querySelector('#helpText').dispatchEvent(new Event('input', {bubbles:true}));
-                document.querySelector('#helpForm').requestSubmit();
+                const send = document.querySelector('#helpForm button');
+                send.focus();
+                send.click();
                 """);
             assertEventually(scenario, "Participant sees sent inquiry and pending state", """
                 document.querySelector('main').textContent.includes('답변 대기') &&
-                document.querySelector('.inquiry-text')?.textContent === '강의 출석을 확인해 주세요.'
+                document.querySelector('.inquiry-text')?.textContent === '강의 출석을 확인해 주세요.' &&
+                document.querySelector('#helpText').value === '' &&
+                !document.querySelector('#helpForm button').disabled
                 """);
             switchAccount(scenario, "staff");
             assertEventually(scenario, "Staff dashboard", "!!document.querySelector('[data-tab=noti]')");

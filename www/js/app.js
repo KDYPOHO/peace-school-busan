@@ -164,6 +164,10 @@ function render(anim) {
 // 데이터가 바뀌면 다시 그림. 입력 중이면 입력이 끝난 뒤에.
 function refresh() {
   if (!S.user || !$("#view")) return;
+  if (S.helpSending && S.role === "p" && S.tab.p === "ai") {
+    pending = true;
+    return;
+  }
   const a = document.activeElement;
   if (a && $("#view").contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) { pending = true; return; }
   if ($("#sbg")) { pending = true; return; }
@@ -1121,27 +1125,36 @@ const BIND = {
       S.helpSending = true;
       button.disabled = true;
       button.textContent = "보내는 중…";
+      let sent = false;
       try {
         await B.askQuestion(text);
         if (S.user?.uid !== uid) return;
+        sent = true;
         if (S.helpDraft.trim() === text) {
           S.helpDraft = "";
-          if (field.value.trim() === text) {
-            field.value = "";
-            field.blur();
+          const currentField = $("#helpText");
+          if (currentField?.value.trim() === text) {
+            currentField.value = "";
+            currentField.blur();
           }
         }
         toast("문의가 접수됐어요. 내 문의에서 답변을 확인할 수 있어요.");
       } catch {
         if (S.user?.uid !== uid) return;
-        error.textContent = "문의를 보내지 못했어요. 인터넷을 확인하고 다시 보내 주세요.";
-        error.hidden = false;
+        const currentError = $("#helpError");
+        if (currentError) {
+          currentError.textContent = "문의를 보내지 못했어요. 인터넷을 확인하고 다시 보내 주세요.";
+          currentError.hidden = false;
+        }
       } finally {
         if (S.user?.uid === uid) {
           S.helpSending = false;
-          if (error.isConnected && error.hidden) refresh();
-          button.disabled = false;
-          button.textContent = "문의 보내기";
+          if (sent && $("#helpForm")) refresh();
+          const currentButton = $("#helpForm button");
+          if (currentButton) {
+            currentButton.disabled = false;
+            currentButton.textContent = "문의 보내기";
+          }
         }
       }
     };

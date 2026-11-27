@@ -73,6 +73,11 @@ public class AppLaunchTest {
             assertEventually(scenario, "Staff dashboard", "!!document.querySelector('[data-tab=noti]')");
             evaluate(scenario, "document.querySelector('[data-tab=noti]').click()");
             assertEventually(scenario, "Staff sees inquiry reply form", "!!document.querySelector('[data-ans]')");
+            evaluate(scenario, "document.documentElement.dataset.theme = 'dark'");
+            assertEventually(scenario, "Reply editor is readable even in dark mode", """
+                getComputedStyle(document.querySelector('[data-ans] textarea')).backgroundColor === 'rgb(255, 255, 255)' &&
+                getComputedStyle(document.querySelector('[data-ans] textarea')).color === 'rgb(23, 40, 64)'
+                """);
             evaluate(scenario, """
                 (() => {
                   const form = document.querySelector('[data-ans]');

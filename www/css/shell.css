@@ -26,7 +26,19 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 #reader{width:100%;max-width:520px;border-radius:14px;overflow:hidden;background:#000;margin:10px auto}
 #reader video{display:block;width:100%!important}
 .inquiry-card,.scan-card{border-color:var(--glass-line)}
-.inquiry-card .inquiry-reply{border-style:solid}
+/* A readable writing surface in both light and dark themes. */
+.inquiry-card .inquiry-reply{
+  color:#172840;background:linear-gradient(145deg,#F8FCFF,#E6EFFB);
+  border:1px solid #AEC2DA;border-radius:12px;padding:12px;
+  box-shadow:inset 0 1px 0 #fff,0 5px 12px -10px rgba(23,49,90,.65);
+}
+.inquiry-card .inquiry-reply .muted{color:#435A73}
+.inquiry-card .inquiry-reply b{color:#214775}
+.inquiry-card .inquiry-reply .err{color:#962B25}
+.inquiry-card .inquiry-reply textarea{
+  background:#fff;color:#172840;border-color:#829CB8;caret-color:#214775;color-scheme:light;
+}
+.inquiry-card .inquiry-reply textarea:focus{border-color:#255997;outline:2px solid #255997;outline-offset:1px}
 .scan-card > * + *,#attendanceHelp{margin-top:10px}
 .scan-hint{margin-bottom:10px}
 .scan-result{background:var(--surface-2);padding:9px 12px;border-radius:9px;overflow-wrap:anywhere}

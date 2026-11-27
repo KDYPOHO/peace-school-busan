@@ -36,6 +36,8 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .inquiry-card .form p{margin:0}
 .inquiry-filters{margin-bottom:12px}
 .inquiry-reply,.inquiry-card #moreInquiries{margin-top:10px}
+nav.tabs button.new-reply{position:relative}
+nav.tabs button.new-reply::after{content:"";position:absolute;top:5px;left:calc(50% + 11px);width:7px;height:7px;border-radius:50%;background:var(--bad)}
 .inquiry-text{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:5px}
 @media (pointer:coarse) {
   body input,body select,body textarea,body .composer input,body label.f :is(input,select,textarea){font-size:max(16px,1em)}

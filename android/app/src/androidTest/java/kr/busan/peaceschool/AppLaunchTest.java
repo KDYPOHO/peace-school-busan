@@ -107,14 +107,18 @@ public class AppLaunchTest {
                 !document.querySelector('#reader') && sessionStorage.getItem('qaCameraStopped') === 'yes'
                 """);
             switchAccount(scenario, "participant");
-            assertEventually(scenario, "Participant navigation after returning", "!!document.querySelector('[data-tab=ai]')");
+            assertEventually(scenario, "New staff reply appears on participant navigation", """
+                document.querySelector('[data-tab=ai]')?.classList.contains('new-reply')
+                """);
             evaluate(scenario, "document.querySelector('[data-tab=ai]').click()");
             assertEventually(scenario, "Participant sees staff reply", """
-                document.querySelector('.inquiry-reply')?.textContent.includes('출석 내역을 확인했습니다.')
+                document.querySelector('.inquiry-reply')?.textContent.includes('출석 내역을 확인했습니다.') &&
+                !document.querySelector('[data-tab=ai]').classList.contains('new-reply')
                 """);
             evaluate(scenario, """
                 localStorage.removeItem('psb_demo_v1');
                 localStorage.removeItem('psb_camNotice');
+                localStorage.removeItem('psb_inquiry_seen_qa_participant');
                 sessionStorage.removeItem('qaAccounts');
                 sessionStorage.removeItem('qaCameraStopped');
                 location.reload();

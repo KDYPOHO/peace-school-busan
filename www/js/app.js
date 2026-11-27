@@ -144,6 +144,7 @@ function render(anim) {
   nav.style.gridTemplateColumns = `repeat(${tabs.length},1fr)`;
   nav.innerHTML = '<span class="ind"></span>' + tabs.map(([k, l, i]) => `<button data-tab="${k}" ${k === cur ? 'aria-current="page"' : ""}>${ic(i)}<span>${l}</span></button>`).join("");
   const v = $("#view");
+  if (S.role === "p") updateInquiryBadge(cur === "ai");
   if (S.role === "p" && !S.profile) v.innerHTML = onboardCard();
   else v.innerHTML = VIEWS[cur]();
   [...v.children].forEach((c, i) => c.style.setProperty("--i", i));
@@ -439,6 +440,20 @@ const orgKey = u => (u.orgRegion && u.orgRegion !== ORG_NONE ? u.orgRegion : ORG
 function lectureCard(l, tag) {
   return `<h2>${esc(l.title)}</h2><p>${fmtDate(l.date)} ${l.start}~${l.end} · ${esc(VENUE)}</p>`;
 }
+function updateInquiryBadge(viewing) {
+  const tab = $('[data-tab="ai"]');
+  if (!tab) return;
+  const key = "inquiry_seen_" + S.user.uid, seen = LS.get(key, 0);
+  const latest = S.myQs.reduce((time, q) => Math.max(time, q.answeredAt || 0), 0);
+  if (latest <= seen) return;
+  if (viewing) {
+    LS.set(key, latest);
+    return;
+  }
+  tab.classList.add("new-reply");
+  tab.setAttribute("aria-label", "도우미, 새 문의 답변 있음");
+}
+
 function inquiryReply(q) {
   if (!q.answer) return "";
   return `<div class="ai-box inquiry-reply"><b>운영진 답변</b><div class="inquiry-text">${esc(q.answer)}</div>${q.answeredAt ? `<div class="small muted">${fmtTime(q.answeredAt)}</div>` : ""}</div>`;
@@ -1331,7 +1346,7 @@ window.addEventListener("online", offlineBanner); window.addEventListener("offli
   let first = true;
   B.onAuth(async u => {
     stopAll(); stopScanner(); prevAttCount = null;
-    Object.assign(S, { profile: null, staff: false, myAtt: [], notices: [], deepApp: null, myQs: [], users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [], chat: [], myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpSending: false, answerDrafts: {}, answerSending: new Set(), helpFilter: "open", helpLimit: 25 });
+    Object.assign(S, { profile: null, staff: false, myAtt: [], notices: [], deepApp: null, myQs: [], users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [], chat: [], scanLecture: null, myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpSending: false, answerDrafts: {}, answerSending: new Set(), helpFilter: "open", helpLimit: 25 });
     if (u) await onSignedIn(u); else { S.user = null; renderAuth(); }
     if (first) { first = false; setTimeout(() => { const sp = $("#splash"); sp && sp.remove(); }, RM ? 0 : 1500); }
   });

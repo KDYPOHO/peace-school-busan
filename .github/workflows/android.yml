@@ -72,7 +72,7 @@ jobs:
           adb shell input keyevent 82
           adb shell cmd connectivity airplane-mode enable
           cd android
-          ./gradlew connectedDebugAndroidTest --no-daemon
+          ./gradlew :app:connectedDebugAndroidTest --no-daemon
       - uses: actions/upload-artifact@v4
         if: always() && github.ref != 'refs/heads/main'
         with:

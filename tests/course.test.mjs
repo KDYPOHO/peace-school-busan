@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { countedLectures } from '../www/js/course.js';
+import { countedLectures, deepDeadlineLabel } from '../www/js/course.js';
 import { faqAnswer } from '../www/js/faq.js';
 
 test('counts each scheduled lecture once and preserves legacy numeric strings', () => {
@@ -22,4 +22,15 @@ test('온라인 출석 허용 시각은 KST 기준으로 경계 양쪽을 구분
   assert.equal(onlineOpenAt(lecture, open), true);
   assert.equal(onlineOpenAt(lecture, close), true);
   assert.equal(onlineOpenAt(lecture, close + 1), false);
+});
+
+test('심화 지원 안내는 서버 마감값만 사용한다', () => {
+  const question = '심화과정 신청은 언제까지인가요?';
+  assert.match(faqAnswer(question, {}).a, /지원 일정을 확인 중/);
+  assert.doesNotMatch(faqAnswer(question, {}).a, /6\. 20\.|6월 20일/);
+  const evening = Date.parse('2027-06-25T18:00:00+09:00');
+  const midnight = Date.parse('2027-06-26T00:00:00+09:00');
+  assert.equal(deepDeadlineLabel(evening), '6. 25. 18:00');
+  assert.equal(deepDeadlineLabel(midnight), '6. 25. 23:59');
+  assert.match(faqAnswer(question, { deepDeadline: evening }).a, /6\. 25\. 18:00/);
 });

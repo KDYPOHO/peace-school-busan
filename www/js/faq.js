@@ -1,12 +1,13 @@
 // 학습 도우미: 외부 AI 호출 없이 공식 안내문으로만 답함 (AI 비용 0원)
 // 답을 못 찾으면 "운영진에게 물어보기" 버튼이 붙음 → 문의함으로 전달
-import { LECTURES, PASS_COUNT, DEEP, DEEP_APPLY_UNTIL, DEEP_STATUS, VENUE, APP } from "./config.js";
+import { LECTURES, PASS_COUNT, DEEP, DEEP_STATUS, VENUE, APP } from "./config.js";
+import { deepDeadlineLabel } from "./course.js";
 
 export const FAQ_CHIPS = ["수료 조건이 뭐예요?", "내 출석 현황", "다음 강의 언제예요?", "결석하면 어떻게 돼요?", "심화과정 지원", "참가비가 있나요?", "피란수도 부산이 뭐예요?"];
 
 const RULES = [
   { re: /내출석|출석현황|몇강들었|내수료|나수료/, f: c => ({ a: `지금까지 ${c.att.length}강 출석했어요${c.att.length ? ` (${c.att.join(", ")}강)` : ""}. ${c.att.length >= PASS_COUNT ? "수료 요건을 채웠어요!" : `수료까지 ${PASS_COUNT - c.att.length}강 남았어요.`}`, src: "내 출결 기록" }) },
-  { re: /심화|2박|해커톤|8월|선발/, f: c => ({ a: `${DEEP.title}은 ${DEEP.dates}에 열려요. 정원 ${DEEP.cap}명(${DEEP.teams}팀)이고, ${PASS_COUNT}강 이상 출석한 수료 예정자가 ${c.fmtDate(DEEP_APPLY_UNTIL)}까지 지원할 수 있어요.${c.deepApp ? ` 내 지원 상태: ${DEEP_STATUS[c.deepApp.status] || "검토 중"}.` : ""}`, src: "운영 계획 심화과정" }) },
+  { re: /심화|2박|해커톤|8월|선발/, f: c => ({ a: `${DEEP.title}은 ${DEEP.dates}에 열려요. 정원 ${DEEP.cap}명(${DEEP.teams}팀)이고, ${PASS_COUNT}강 이상 출석한 수료 예정자가 지원할 수 있어요. ${c.deepDeadline ? `지원 마감은 ${deepDeadlineLabel(c.deepDeadline)}(한국 시간)이에요.` : "지원 일정을 확인 중이에요. 앱 공지를 확인해 주세요."}${c.deepApp ? ` 내 지원 상태: ${DEEP_STATUS[c.deepApp.status] || "검토 중"}.` : ""}`, src: "운영 계획 심화과정" }) },
   { re: /수료증|증명서|인쇄|pdf/, f: () => ({ a: "수료 요건을 채우면 수료식 날 내 정보 탭에 수료증이 발급되고, 인쇄하거나 PDF로 저장할 수 있어요.", src: "수료증 발급 안내" }) },
   { re: /다음강의|언제|일정|날짜|몇시/, f: c => c.next ? { a: `다음 강의는 ${c.next.n}강 「${c.next.title}」, ${c.fmtDate(c.next.date)} ${c.next.start}~${c.next.end}이에요. 장소: ${VENUE}.`, src: "기본과정 일정" } : { a: "기본과정 강의는 모두 끝났어요. 심화과정 일정은 일정 탭에서 볼 수 있어요.", src: "기본과정 일정" } },
   { re: /수료|조건|몇강|요건/, f: () => ({ a: `기본과정 ${LECTURES.length}강 중 ${PASS_COUNT}강 이상 출석하면 수료예요. 현장과 온라인 출석 모두 인정되고, 수료하면 심화과정에 지원할 수 있어요. 수료증은 수료식 날 앱에서 자동 발급돼요.`, src: "운영 계획 수료 기준" }) },

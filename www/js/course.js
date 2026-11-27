@@ -20,3 +20,14 @@ export function onlineOpenAt(lecture, now) {
   const { opensAt, closesAt } = lectureWindow(lecture);
   return opensAt <= now && now <= closesAt;
 }
+
+export function deepDeadlineLabel(closesAt) {
+  if (!Number.isFinite(closesAt)) return '';
+  const day = 86_400_000;
+  const kst = closesAt + 9 * 3_600_000;
+  // Midnight closes the preceding application day.
+  const shown = new Date(kst % day === 0 ? kst - 1 : kst);
+  const hours = String(shown.getUTCHours()).padStart(2, '0');
+  const minutes = String(shown.getUTCMinutes()).padStart(2, '0');
+  return `${shown.getUTCMonth() + 1}. ${shown.getUTCDate()}. ${hours}:${minutes}`;
+}

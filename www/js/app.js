@@ -1,7 +1,7 @@
 // 한반도 평화학교 앱 (참가자 + 운영진)
 import { APP, LECTURES, VENUE, PASS_COUNT, ONSITE_CAP, DEEP, TEAMS, CRITERIA, REGIONS, DEEP_STATUS } from "./config.js";
 import { createBackend, isNative, newRequestId } from "./backend.js";
-import { countedLectures, lectureWindow, onlineOpenAt } from "./course.js";
+import { countedLectures, deepDeadlineLabel, lectureWindow, onlineOpenAt } from "./course.js";
 import { faqAnswer, FAQ_CHIPS } from "./faq.js";
 import { ORG_ROOT, REGION_COUNCILS, DOMESTIC, OVERSEAS, NONE as ORG_NONE, affiliationLabel, affiliationFull } from "./councils.js";
 const MEMBER_TYPES = ["자문위원", "청년 서포터즈·추천 청년", "일반 청년"];
@@ -803,7 +803,7 @@ function deepCard() {
   else action = `<button class="btn block" disabled>${PASS_COUNT}강 출석 후 지원 가능</button>`;
   return `<section class="card">
     <div class="row between"><h2 style="margin:0">${esc(DEEP.title)}</h2><span class="pill p-gold">정원 ${DEEP.cap}명</span></div>
-    <p class="small muted" style="margin:6px 0 10px">${esc(DEEP.dates)} · ${deadline ? "지원 마감 " + fmtTime(deadline - 1) : "지원 일정 확인 중"}. 오후 자유시간과 자율 참여 저녁 프로그램으로 여유 있게 진행해요.</p>
+    <p class="small muted" style="margin:6px 0 10px">${esc(DEEP.dates)} · ${deadline ? "지원 마감 " + deepDeadlineLabel(deadline) + " (한국 시간)" : "지원 일정 확인 중"}. 오후 자유시간과 자율 참여 저녁 프로그램으로 여유 있게 진행해요.</p>
     ${action}
   </section>`;
 }
@@ -890,9 +890,12 @@ function ask(q) {
   q = q.trim(); if (!q || busy) return;
   busy = true; S.chat.push({ who: "me", text: q }); render();
   const c = $("#chat"); c.insertAdjacentHTML("beforeend", '<div class="msg ai typing"><i></i><i></i><i></i></div>'); c.lastElementChild.scrollIntoView({ block: "nearest" });
-  const r = faqAnswer(q, { att: myAttended(), profile: S.profile, deepApp: S.deepApp, next: nextLecture(), fmtDate });
+  const viewer = S.user;
   setTimeout(() => {
-    busy = false; S.chat.push({ who: "ai", text: r.a, src: r.src, ask: r.unknown ? q : null }); render();
+    busy = false;
+    if (S.user !== viewer) return;
+    const r = faqAnswer(q, { att: myAttended(), profile: S.profile, deepApp: S.deepApp, deepDeadline: S.deepDeadline, next: nextLecture(), fmtDate });
+    S.chat.push({ who: "ai", text: r.a, src: r.src, ask: r.unknown ? q : null }); render();
     const c2 = $("#chat"); c2 && c2.lastElementChild.scrollIntoView({ block: "nearest", behavior: RM ? "auto" : "smooth" });
   }, RM ? 0 : 650);
 }

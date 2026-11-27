@@ -48,6 +48,8 @@ iPad 시험판의 참가자·운영진 계정 흐름과 Play Console·TestFlight
 
 Android 46과 iPad 시험판 16의 공통 웹 파일 25개를 대조했다. iPad에 시험판 16을 설치했다. 대기 화면과 승인 후 과정 화면을 확인하는 iPad XCTest를 빌드했으며, 기기 잠금 때문에 실행을 보류했다. 양쪽 내부 채널 배포는 진행 전이다.
 
+Pixel 5 실기기(Android 11)는 Android 시험 빌드 47에서 가입 승인 실기기 검사를 통과했다. 승인 전에는 대기 화면과 과정 메뉴 차단을 확인했고, 시험 운영진 승인 후 같은 로그인 상태에서 출석 메뉴와 QR 수강증이 열렸다. Android 46·47의 웹 파일과 Capacitor 래퍼 27개 해시는 모두 일치했다. [실기기 승인 결과](https://console.firebase.google.com/project/hanbando-peace-school-qa/testlab/histories/bh.4c2fdb24b53056aa/matrices/6080358177710308262) · [Android 테스트 빌드](https://github.com/KDYPOHO/peace-school-busan/actions/runs/45969037294)
+
 ## 가입 승인 후보 서명 결과
 
 1.3.2 Android 46은 Play Console에 등록된 기존 업로드 인증서로 서명했다. `jarsigner`와 `bundletool validate` 검사를 통과했으며 패키지 `kr.busan.peaceschool`, 최소 API 24, 대상 API 36을 확인했다. Apple 16은 Xcode에서 App Store Connect용 IPA로 내보냈고, 배포 서명과 iPhone·iPad 지원을 확인했다. 두 서명 패키지에서 시험 Firebase 설정을 포함한 공통 웹 파일 25개의 SHA-256이 일치했다. [후보 소스 및 자동 검증](https://github.com/KDYPOHO/peace-school-busan/actions/runs/45960878587)

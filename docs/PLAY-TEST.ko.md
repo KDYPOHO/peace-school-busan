@@ -69,6 +69,19 @@ iPhone SE 3 실기기(iOS 26.3)는 Apple 시험 빌드 16의 가입 승인 검�
 
 Play Console 내부 테스트의 현재 빌드는 1.3.1(29)이며 TestFlight 내부 그룹은 1.3.1(11)을 테스트 중이다. 이 TestFlight 그룹은 Xcode 빌드를 자동 배포하도록 설정되어 있어 승인 실기기 검증이 끝날 때까지 최신 후보 업로드를 보류한다.
 
+### 운영 Firebase 연결 후보
+
+커밋 `8be4e47310151f613d1637c9c88a078bba986571`에서 `PSB_BUILD_MODE=production`으로 Android 1.3.2(48)와 Apple 1.3.2(17)를 빌드하고 서명했다. 두 패키지는 Busan Peace School(`kdypoho`)에 연결하도록 설정되어 있으며, 패키지 안 공통 파일 27개의 SHA-256이 일치했다. Apple 시험 아카이브와 운영 아카이브의 공통 파일은 Firebase 설정 파일만 달랐다.
+
+Android AAB는 `bundletool validate`를 통과했다. 등록된 Play 업로드 인증서와 서명이 일치했고 최소 API 24와 대상 API 36을 확인했다. Apple IPA는 App Store Connect용 내보내기에서 배포 서명을 확인했고 iPhone·iPad 15 이상을 지원한다. 두 패키지의 앱 ID는 `kr.busan.peaceschool`이다.
+
+| 운영 후보 파일 | SHA-256 |
+|---|---|
+| 한반도-평화학교-운영-Android-48.aab | `012c9d06cf46ba6dedf3b753702a569aef75f07101ee34fa1938f2303a0232da` |
+| 한반도-평화학교-운영-Apple-17.ipa | `37557cceba0e9770b3368ab901f6895c2f2dc6089f40bc1a02ea649b442da7f2` |
+
+위 결과는 패키지 검사다. 운영 후보의 스토어 등록과 운영 Firestore 규칙 적용은 검증 후 진행한다. 가입 승인 실기기 검증에는 별도 시험 Firebase를 사용하는 시험판을 쓴다.
+
 ## 업로드 서명
 
 Play Console에서 패키지와 사용 중인 업로드 인증서를 확인한다. 호환되는 업로드 키를 로컬 비밀 저장소에서 관리하고 다음 환경 변수를 로컬 프로세스에 주입한다.

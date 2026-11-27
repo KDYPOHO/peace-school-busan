@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import {
   Timestamp, collection, deleteDoc, deleteField, doc, getDoc, getDocs, query,
-  runTransaction, serverTimestamp, setDoc, where, writeBatch
+  runTransaction, serverTimestamp, setDoc, updateDoc, where, writeBatch
 } from 'firebase/firestore';
 
 import { keepFirstAnswer } from '../www/js/backend.js';
@@ -42,6 +42,40 @@ beforeEach(async () => {
 
 const attend = (store, uid, lecture, method = 'online', by) => setDoc(doc(store, 'attendance', lecture + '_' + uid), {
   uid, lecture, method, at: serverTimestamp(), ...(by ? { by } : {})
+});
+
+test('새 가입은 운영진이 한 번 승인할 때까지 과정 데이터에 접근할 수 없다', async () => {
+  const uid = 'new-applicant', applicant = db(uid), staff = db('operator-one');
+  const profile = doc(applicant, 'users', uid);
+  const ownQuestion = doc(applicant, 'questions', uid + '_' + '1'.repeat(32));
+  const inquiry = { uid, text: '승인 확인 문의', status: 'open', at: serverTimestamp() };
+  const approve = (store, by) => updateDoc(doc(store, 'users', uid), {
+    approvalStatus: 'approved', approvedBy: by, approvedAt: serverTimestamp()
+  });
+
+  await assertFails(getDoc(doc(applicant, 'courseSchedule', '1')));
+  await assertFails(setDoc(profile, { name: '가상 신규 참가자', consent: true }));
+  await assertFails(setDoc(profile, { name: '가상 신규 참가자', consent: true, approvalStatus: 'approved' }));
+  await assertSucceeds(setDoc(profile, { name: '가상 신규 참가자', consent: true, approvalStatus: 'pending' }));
+  assert.equal((await getDoc(profile)).data().approvalStatus, 'pending');
+  await assertFails(approve(applicant, uid));
+  await assertFails(deleteDoc(doc(applicant, 'staff', uid)));
+  await assertFails(setDoc(doc(applicant, 'staff', uid), { label: '가상 운영진' }));
+  await assertFails(setDoc(doc(staff, 'staff', uid), { label: '가입 승인 전' }));
+  await assertFails(getDocs(collection(applicant, 'notices')));
+  await assertFails(getDoc(doc(applicant, 'deepApps', uid)));
+  await assertFails(setDoc(ownQuestion, inquiry));
+  await assertFails(attend(applicant, uid, 1));
+  await assertFails(attend(staff, uid, 1, 'manual', 'operator-one'));
+  await assertFails(approve(staff, 'operator-two'));
+  await assertSucceeds(approve(staff, 'operator-one'));
+  await assertFails(approve(db('operator-two'), 'operator-two'));
+  const approved = (await getDoc(profile)).data();
+  assert.equal(approved.approvalStatus, 'approved');
+  assert.equal(approved.approvedBy, 'operator-one');
+  await assertSucceeds(getDoc(doc(applicant, 'courseSchedule', '1')));
+  await assertSucceeds(setDoc(ownQuestion, inquiry));
+  await assertSucceeds(attend(applicant, uid, 1));
 });
 
 test('출석은 서버 시각과 회차를 검사하고 본인과 운영진에게만 보여준다', async () => {

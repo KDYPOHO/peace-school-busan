@@ -3,6 +3,9 @@ import { deleteAccountInOrder } from "./account-deletion.js";
 import { lectureWindow } from "./course.js";
 
 const unavailable = () => Object.assign(new Error("Firebase configuration or connection unavailable"), { code: "unavailable" });
+export function isApprovedProfile(profile) {
+  return profile != null && (profile.approvalStatus === undefined || profile.approvalStatus === "approved");
+}
 export function newRequestId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), n => n.toString(16).padStart(2, "0")).join("");
 }
@@ -97,6 +100,11 @@ async function firebaseBackend(settings, emulator) {
           }
         },
         async deleteRecords() {
+          const profile = await api.getProfile();
+          if (!isApprovedProfile(profile) && !(await api.isStaff())) {
+            await deleteDoc(doc(db, "users", uid));
+            return;
+          }
           const application = doc(db, "deepApps", uid);
           await transaction(async tx => {
             const existing = (await tx.get(application)).data();
@@ -128,10 +136,31 @@ async function firebaseBackend(settings, emulator) {
       const s = await read(doc(db, "users", api.user.uid));
       return s.exists() ? { id: s.id, ...s.data() } : null;
     },
+    watchOwnProfile(cb, onError) {
+      return onSnapshot(doc(db, "users", api.user.uid), { includeMetadataChanges: true }, snap => {
+        if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) cb(snap.data() || null);
+      }, onError);
+    },
     async createProfile(p) {
-      const data = { ...p, no: makeNo(), email: api.user.email, consent: true, consentAt: ts(), createdAt: ts() };
-      await setDoc(doc(db, "users", api.user.uid), data);
-      return { ...data, consentAt: Date.now(), createdAt: Date.now() };
+      const ref = doc(db, "users", api.user.uid);
+      const data = { ...p, no: makeNo(), email: api.user.email, consent: true, consentAt: ts(), createdAt: ts(), approvalStatus: "pending" };
+      ensureOnline();
+      return transaction(async tx => {
+        const existing = (await tx.get(ref)).data();
+        if (existing) return existing;
+        tx.set(ref, data);
+        return { ...data, consentAt: Date.now(), createdAt: Date.now() };
+      });
+    },
+    async approveProfile(uid) {
+      ensureOnline();
+      const ref = doc(db, "users", uid), approvedBy = api.user.uid;
+      return transaction(async tx => {
+        const profile = (await tx.get(ref)).data();
+        if (profile?.approvalStatus !== "pending") return false;
+        tx.update(ref, { approvalStatus: "approved", approvedAt: ts(), approvedBy });
+        return true;
+      });
     },
     async updateProfile(p) { await updateDoc(doc(db, "users", api.user.uid), { ...p, updatedAt: ts() }); },
 
@@ -298,7 +327,25 @@ function demoBackend() {
     async deleteAccount() { for (const k of Object.keys(D.attendance)) if (D.attendance[k].uid === D.me.uid) delete D.attendance[k]; D.questions = D.questions.filter(q => q.uid !== D.me.uid); delete D.users[D.me.uid]; delete D.deepApps[D.me.uid]; if (D.reads) delete D.reads[D.me.uid]; return api.signOut(); },
     async isStaff() { return !!D.staff[api.user.uid]; },
     async getProfile() { return D.users[api.user.uid] || null; },
-    async createProfile(p) { const data = { ...p, no: makeNo(), email: api.user.email, consent: true, consentAt: Date.now(), createdAt: Date.now() }; D.users[api.user.uid] = data; save(); return data; },
+    watchOwnProfile(cb) {
+      const uid = api.user.uid;
+      const refresh = () => cb(D.users[uid] || null);
+      listeners.add(refresh);
+      queueMicrotask(() => { if (listeners.has(refresh)) refresh(); });
+      return () => listeners.delete(refresh);
+    },
+    async createProfile(p) {
+      const data = { ...p, no: makeNo(), email: api.user.email, consent: true, consentAt: Date.now(), createdAt: Date.now(), approvalStatus: "pending" };
+      D.users[api.user.uid] ||= data;
+      save();
+      return D.users[api.user.uid];
+    },
+    async approveProfile(uid) {
+      if (!D.staff[api.user.uid] || D.users[uid]?.approvalStatus !== "pending") return false;
+      Object.assign(D.users[uid], { approvalStatus: "approved", approvedAt: Date.now(), approvedBy: api.user.uid });
+      save();
+      return true;
+    },
     async updateProfile(p) { Object.assign(D.users[api.user.uid], p, { updatedAt: Date.now() }); save(); },
     watchMyAttendance(cb) { return sub(() => cb(Object.entries(D.attendance).filter(([, a]) => a.uid === api.user?.uid).map(([id, a]) => ({ id, ...a })))); },
     async checkInOnline(n) { D.attendance[`${n}_${api.user.uid}`] = { uid: api.user.uid, lecture: n, method: "online", at: Date.now() }; save(); },

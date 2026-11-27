@@ -100,7 +100,7 @@ async function enroll(page) {
   await page.locator('#oNext').click();
   for (const field of ['#oT', '#oC1', '#oC2']) await page.locator(field).check();
   await page.locator('#oNext').click();
-  await page.getByText('수강 신청 완료', { exact: true }).waitFor();
+  await page.getByRole('heading', { name: '가입 승인 대기' }).waitFor();
   await page.locator('.success').waitFor({ state: 'hidden' });
 }
 
@@ -158,6 +158,20 @@ test('Chromium과 WebKit에서 참가자 신청, 문의 답변, 읽음 상태를
   await enroll(android.page);
   const apple = await openPage(safari, devices['iPhone 13'], url);
   await signIn(apple.page, participant);
+  await apple.page.locator('#approvalPending').waitFor();
+  for (const { page } of [android, apple]) {
+    assert.equal(await page.locator('[data-tab=att]').count(), 0);
+  }
+  const appleStaff = await openPage(safari, devices['iPhone 13'], url, { colorScheme: 'dark' });
+  await signIn(appleStaff.page, operator);
+  await appleStaff.page.locator('#roleA').click();
+
+  await appleStaff.page.locator('[data-tab=people]').click();
+  await appleStaff.page.getByRole('button', { name: '가입 승인', exact: true }).click();
+  await appleStaff.page.getByRole('button', { name: '승인하기', exact: true }).click();
+  await Promise.all([android.page, apple.page].map(page => page.locator('[data-tab=att]').waitFor()));
+  t.diagnostic('새 계정은 두 앱에서 대기하고 운영진 승인 한 번으로 두 앱에서 입장됨');
+  await appleStaff.page.locator('[data-tab=noti]').click();
   for (const { page } of [android, apple]) {
     await page.locator('[data-view=home] [data-go=att]').click();
     await page.locator('.qr-pass svg').waitFor();
@@ -166,10 +180,6 @@ test('Chromium과 WebKit에서 참가자 신청, 문의 답변, 읽음 상태를
   assert.equal(await apple.page.getByText(/^수강번호 BS27-/).textContent(), enrollment);
   t.diagnostic('Chromium 신청이 WebKit에서 같은 수강번호와 QR로 표시됨');
 
-  const appleStaff = await openPage(safari, devices['iPhone 13'], url, { colorScheme: 'dark' });
-  await signIn(appleStaff.page, operator);
-  await appleStaff.page.locator('#roleA').click();
-  await appleStaff.page.locator('[data-tab=noti]').click();
   const firstQuestion = 'Chromium에서 보낸 가상 문의';
   const firstAnswer = 'WebKit에서 남긴 가상 답변';
   await android.page.locator('#attendanceHelp').click();

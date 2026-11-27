@@ -1,7 +1,7 @@
 import qrcode from "qrcode-generator";
 // 한반도 평화학교 앱 (참가자 + 운영진)
 import { APP, LECTURES, VENUE, PASS_COUNT, ONSITE_CAP, DEEP, TEAMS, CRITERIA, REGIONS, DEEP_STATUS } from "./config.js";
-import { createBackend, isNative, newRequestId } from "./backend.js";
+import { createBackend, isApprovedProfile, isNative, newRequestId } from "./backend.js";
 import { countedLectures, deepDeadlineLabel, lectureWindow, onlineOpenAt, scheduledLectures } from "./course.js";
 import { faqAnswer, FAQ_CHIPS } from "./faq.js";
 import { ORG_ROOT, REGION_COUNCILS, DOMESTIC, OVERSEAS, NONE as ORG_NONE, affiliationLabel, affiliationFull } from "./councils.js";
@@ -89,7 +89,7 @@ const S = {
   lectures: scheduledLectures(),
   tab: { p: "home", a: "dash" },
   myAtt: [], notices: [], deepApp: null, myQs: [], reads: new Set(), inboxError: false,
-  users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [],
+  users: [], pendingApprovals: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [],
   myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpSending: false, answerDrafts: {}, answerErrors: {}, answerSending: new Set(), helpFilter: "open", helpLimit: 25,
   judge: { round: "예선", team: 0 }, scanLecture: null, chat: [], authMode: "login", onboardStep: 0, draft: {}
 };
@@ -142,7 +142,7 @@ function setRole(r) {
 }
 function render(anim) {
   if (!S.user) return renderAuth();
-  if (!S.profile && !S.staff) return renderOnboard();
+  if (!S.staff && !isApprovedProfile(S.profile)) return S.profile ? renderApprovalPending() : renderOnboard();
   if (!$("#view")) shell();
   $("#seg").hidden = !S.staff;
   const to = $("#topOrg"); if (to) to.textContent = S.profile ? affiliationFull(S.profile) : ORG_ROOT;
@@ -383,6 +383,23 @@ function accountRemovalSheet() {
   };
 }
 
+function renderApprovalPending() {
+  $("#root").innerHTML = `<div class="auth">
+    <div class="logo"><img class="signature" src="img/puac-signature-ko.jpg" alt="민주평화통일자문회의"><b>${esc(APP.displayName)}</b>${testLabel()}</div>
+    <section class="card" id="approvalPending" aria-labelledby="approvalHeading">
+      <h2 id="approvalHeading">가입 승인 대기</h2>
+      <p class="small muted" role="status">신청서를 접수했어요. 운영진이 승인하면 평화학교를 이용할 수 있어요.</p>
+      <p class="small muted" id="approvalError" role="status" hidden></p>
+      <button class="btn block" id="refreshApproval" type="button">승인 상태 확인</button>
+      <button class="btn ghost block" id="leaveApproval" type="button">다른 계정으로 로그인</button>
+      <button class="btn ghost block" id="deletePending" type="button">계정 삭제</button>
+    </section>
+  </div>`;
+  $("#refreshApproval").onclick = () => onSignedIn(S.user);
+  $("#leaveApproval").onclick = () => B.signOut();
+  $("#deletePending").onclick = accountRemovalSheet;
+}
+
 /* ───────── 수강 신청 (3단계) ───────── */
 function renderOnboard() {
   $("#root").innerHTML = `<div class="auth" style="justify-content:flex-start">
@@ -465,11 +482,13 @@ function bindOnboard() {
       d.photo = $("#oC3").checked; d.opt = $("#oC4").checked;
       const btn = $("#oNext"); btn.disabled = true; btn.textContent = "신청 중…";
       try {
-        S.profile = await B.createProfile({ name: d.name, birthYear: +d.birthYear, phone: d.opt ? d.phone : "", region: d.region, orgRegion: d.orgRegion, orgCouncil: d.orgRegion === ORG_NONE ? "" : d.orgCouncil, memberType: d.memberType, memberVerified: d.memberType === "자문위원" ? "pending" : "", memberTerm: d.memberType === "자문위원" ? d.memberTerm : "", memberNo: d.memberType === "자문위원" ? d.memberNo : "", org: d.opt ? d.org : "", mode: d.mode, optionalConsent: d.opt, photoConsent: d.photo, termsAgreed: true, privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion });
-        if (!d.opt && (d.phone || d.org)) setTimeout(() => toast("선택 동의를 하지 않아 휴대폰 번호와 소속은 저장하지 않았어요", 3600), 2800);
-        S.draft = {}; S.onboardStep = 0; S.role = "p";
-        shell(); startProfileData(); render("fwd");
-        celebrate("수강 신청 완료", `수강번호 ${S.profile.no}`, "환영해요");
+        const user = S.user;
+        const profile = await B.createProfile({ name: d.name, birthYear: +d.birthYear, phone: d.opt ? d.phone : "", region: d.region, orgRegion: d.orgRegion, orgCouncil: d.orgRegion === ORG_NONE ? "" : d.orgCouncil, memberType: d.memberType, memberVerified: d.memberType === "자문위원" ? "pending" : "", memberTerm: d.memberType === "자문위원" ? d.memberTerm : "", memberNo: d.memberType === "자문위원" ? d.memberNo : "", org: d.opt ? d.org : "", mode: d.mode, optionalConsent: d.opt, photoConsent: d.photo, termsAgreed: true, privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion });
+        if (S.user?.uid !== user.uid) return;
+        S.profile = profile;
+        S.draft = {}; S.onboardStep = 0;
+        await onSignedIn(user);
+        if (S.user?.uid === user.uid && !d.opt && (d.phone || d.org)) toast("선택 동의를 하지 않아 휴대폰 번호와 소속은 저장하지 않았어요");
       } catch (e2) { console.error(e2); err("신청서를 저장하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요."); btn.disabled = false; btn.textContent = "신청 완료"; }
       return;
     }
@@ -687,6 +706,7 @@ const VIEWS = {
     </section>`;
   },
   people() {
+    const approvals = [...S.pendingApprovals].sort((a, b) => a.createdAt - b.createdAt);
     const q = (S.peopleQ || "").trim(), f = S.peopleF || "all";
     const rows = S.users.map(u => ({ ...u, att: attOf(u.uid) })).map(u => ({ ...u, rem: remainingFor(u.att) }))
       .filter(u => f === "all" || (f === "pass" && u.att.length >= PASS_COUNT) || (f === "risk" && u.att.length < PASS_COUNT && u.att.length + u.rem >= PASS_COUNT && u.att.length + u.rem - PASS_COUNT <= 0) || (f === "lost" && u.att.length + u.rem < PASS_COUNT) || (f === "online" && u.mode === "online") || (f === "verify" && isPendingMember(u)))
@@ -694,6 +714,10 @@ const VIEWS = {
       .filter(u => !q || [u.name, u.no, u.org, u.region, u.email, affiliationLabel(u)].some(x => String(x || "").toLowerCase().includes(q.toLowerCase())))
       .sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"));
     return `
+    <section class="card">
+      <div class="row between"><h2 style="margin:0">가입 승인 대기</h2><span class="pill p-warn">${approvals.length}명</span></div>
+      <div class="list">${approvals.length ? approvals.map(u => `<article class="li"><div class="body"><b>${esc(u.name)}</b><div class="small muted">${esc(u.email)} · ${esc(affiliationLabel(u))}</div><div class="small muted">${fmtTime(u.createdAt)}</div></div><button class="btn mini" type="button" data-approve-profile="${esc(u.uid)}">가입 승인</button></article>`).join("") : '<p class="small muted">확인할 가입 신청이 없어요.</p>'}</div>
+    </section>
     <section class="card">
       <div class="row between"><h2 style="margin:0">참가자</h2><span class="small muted num">${rows.length} / ${S.users.length}명</span></div>
       <input class="search" id="pq" style="margin-top:10px" placeholder="이름, 수강번호, 소속, 지역 검색" value="${esc(q)}" aria-label="참가자 검색">
@@ -1266,6 +1290,18 @@ const BIND = {
     $("#pc").onchange = e => { S.peopleC = e.target.value; render(); };
     $$("[data-pf]").forEach(b => (b.onclick = () => { S.peopleF = b.dataset.pf; render(); }));
     $$("[data-user]").forEach(b => (b.onclick = () => userSheet(b.dataset.user)));
+    $$("[data-approve-profile]").forEach(button => button.onclick = async () => {
+      const applicant = S.pendingApprovals.find(profile => profile.uid === button.dataset.approveProfile);
+      if (!applicant || !(await confirmSheet("가입을 승인할까요?", `${applicant.name}님이 평화학교를 이용할 수 있게 돼요.`, "승인하기"))) return;
+      button.disabled = true;
+      try {
+        const changed = await B.approveProfile(applicant.uid);
+        toast(changed ? "가입을 승인했어요" : "이미 처리된 신청이에요");
+      } catch {
+        button.disabled = false;
+        toast("가입을 승인하지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.");
+      }
+    });
   },
   scan() {
     $("#scanL").onchange = e => {
@@ -1425,7 +1461,11 @@ function restartScores() {
 }
 function startStaffData() {
   if (staffUnsubs.length || !S.staff) return;
-  staffUnsubs.push(B.watchUsers(r => { S.users = r; refresh(); }));
+  staffUnsubs.push(B.watchUsers(r => {
+    S.users = r.filter(isApprovedProfile);
+    S.pendingApprovals = r.filter(profile => profile.approvalStatus === "pending");
+    refresh();
+  }));
   staffUnsubs.push(B.watchAllAttendance(r => { S.allAtt = r; refresh(); }));
   staffUnsubs.push(B.watchDeepApps(r => { S.deepApps = r; refresh(); }));
   staffUnsubs.push(B.watchQuestions(
@@ -1437,6 +1477,8 @@ function startStaffData() {
 }
 let prevAttCount = null;
 async function onSignedIn(u) {
+  if (!u || (S.user && S.user.uid !== u.uid)) return;
+  stopAll();
   S.user = u;
   if (deletionPage && B.mode !== 'demo') {
     $('#root').innerHTML = `<div class="auth"><section class="card"><h2>계정 및 데이터 삭제</h2><p>${esc(u.email)} 계정으로 로그인했습니다.</p><button class="btn danger block" id="webDelete">삭제 계속하기</button><button class="btn ghost block" id="webOut">다른 계정으로 로그인</button><a href="./">앱으로 돌아가기</a></section></div>`;
@@ -1449,11 +1491,21 @@ async function onSignedIn(u) {
   try {
     const [profile, staff] = await Promise.all([B.getProfile(), B.isStaff()]);
     if (S.user?.uid !== u.uid) return;
-    const deepApp = profile ? await B.getDeepApp() : null;
+    const deepApp = isApprovedProfile(profile) || (staff && profile) ? await B.getDeepApp() : null;
     if (S.user?.uid !== u.uid) return;
     Object.assign(S, { profile, staff, deepApp });
   } catch {
     if (S.user?.uid === u.uid) connectionError(() => onSignedIn(u));
+    return;
+  }
+  if (!S.staff && !isApprovedProfile(S.profile)) {
+    render();
+    if (S.profile) unsubs.push(B.watchOwnProfile(profile => {
+      if (S.user?.uid === u.uid && isApprovedProfile(profile)) void onSignedIn(u);
+    }, () => {
+      const error = $("#approvalError");
+      if (error) { error.hidden = false; error.textContent = "연결을 확인한 뒤 승인 상태를 다시 확인해 주세요."; }
+    }));
     return;
   }
   if (S.profile && S.profile.largeText != null && LS.get("large", null) == null) { LS.set("large", !!S.profile.largeText); applyPrefs(); }
@@ -1542,7 +1594,7 @@ async function boot() {
     Object.assign(S, {
       user: null, profile: null, staff: false, lectures: scheduledLectures(), deepDeadline: null, onlineStatus: "", onlineSending: false,
       myAtt: [], notices: [], deepApp: null, myQs: [], reads: new Set(), inboxError: false, noticesError: false,
-      users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [], chat: [], scanLecture: null,
+      users: [], pendingApprovals: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [], chat: [], scanLecture: null,
       myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpRequest: null, helpSending: false,
       answerDrafts: {}, answerErrors: {}, answerSending: new Set(), helpFilter: "open", helpLimit: 25
     });

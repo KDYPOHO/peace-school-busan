@@ -1,6 +1,7 @@
 // 부산 청년 평화학교 앱 (참가자 + 운영진)
 import { APP, LECTURES, VENUE, PASS_COUNT, ONSITE_CAP, DEEP, TEAMS, CRITERIA, REGIONS, DEEP_APPLY_UNTIL, DEEP_STATUS } from "./config.js";
 import { createBackend, isNative } from "./backend.js";
+import { countedLectures } from "./course.js";
 import { faqAnswer, FAQ_CHIPS } from "./faq.js";
 import { ORG_ROOT, REGION_COUNCILS, DOMESTIC, OVERSEAS, NONE as ORG_NONE, affiliationLabel, affiliationFull } from "./councils.js";
 const MEMBER_TYPES = ["자문위원", "청년 서포터즈·추천 청년", "일반 청년"];
@@ -84,8 +85,8 @@ const S = {
   judge: { round: "예선", team: 0 }, scanLecture: null, chat: [], authMode: "login", onboardStep: 0, draft: {}
 };
 let unsubs = [], staffUnsubs = [];
-const myAttended = () => [...new Set(S.myAtt.map(a => a.lecture))].sort();
-const attOf = uid => [...new Set(S.allAtt.filter(a => a.uid === uid).map(a => a.lecture))].sort();
+const myAttended = () => countedLectures(S.myAtt.map(a => a.lecture));
+const attOf = uid => countedLectures(S.allAtt.filter(a => a.uid === uid).map(a => a.lecture));
 
 /* ───────── 표시 설정 ───────── */
 function applyPrefs() {
@@ -982,7 +983,8 @@ const BIND = {
     f.onclick = tg; f.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tg(); } };
     const o = $("#onlineBtn");
     o && (o.onclick = async () => {
-      const l = todayLecture(); if (!l) return;
+      const l = todayLecture();
+      if (!onlineOpen(l)) { render(); return toast("현재 온라인 출석 가능 시간이 아니에요."); }
       o.disabled = true;
       try { await B.checkInOnline(l.n); const c = myAttended().length + (myAttended().includes(l.n) ? 0 : 1); celebrate("온라인 출석 완료", `${l.n}강 · ${fmtDate(l.date)}`, `${c} / ${LECTURES.length}강`); }
       catch (e) { console.error(e); o.disabled = false; toast("출석을 기록하지 못했어요. 다시 눌러 주세요."); }

@@ -32,7 +32,10 @@ async function firebaseBackend() {
   const { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocs, serverTimestamp, addDoc } = F;
   const ts = () => serverTimestamp();
   const toMs = v => (v && v.toMillis ? v.toMillis() : (typeof v === "number" ? v : Date.now()));
-  const rows = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const rows = snap => snap.docs.map(d => ({ ...d.data(), id: d.id }));
+  const questions = snap => rows(snap).map(row => ({
+    ...row, at: row.at ? toMs(row.at) : 0, answeredAt: row.answeredAt ? toMs(row.answeredAt) : 0
+  })).sort((a, b) => b.at - a.at);
 
   const api = {
     mode: "firebase",
@@ -113,10 +116,12 @@ async function firebaseBackend() {
     // 운영진
     async recordAttendance(uid, n, method) {
       const ref = doc(db, "attendance", `${n}_${uid}`);
-      const ex = await getDoc(ref);
-      if (ex.exists()) return { duplicate: true };
-      await setDoc(ref, { uid, lecture: n, method, at: ts(), by: api.user.uid });
-      return { duplicate: false };
+      const by = api.user.uid;
+      return F.runTransaction(db, async tx => {
+        if ((await tx.get(ref)).exists()) return { duplicate: true };
+        tx.set(ref, { uid, lecture: n, method, at: ts(), by });
+        return { duplicate: false };
+      });
     },
     async removeAttendance(uid, n) { await deleteDoc(doc(db, "attendance", `${n}_${uid}`)); },
     watchAllAttendance(cb) {
@@ -139,9 +144,22 @@ async function firebaseBackend() {
     async deleteNotice(id) { await deleteDoc(doc(db, "notices", id)); },
 
     async askQuestion(text) { await addDoc(collection(db, "questions"), { uid: api.user.uid, text, at: ts(), status: "open" }); },
-    watchMyQuestions(cb) { return onSnapshot(query(collection(db, "questions"), where("uid", "==", api.user.uid)), s => cb(rows(s).map(r => ({ ...r, at: toMs(r.at) })).sort((a, b) => b.at - a.at)), () => cb([])); },
-    watchQuestions(cb) { return onSnapshot(collection(db, "questions"), s => cb(rows(s).map(r => ({ ...r, at: toMs(r.at) })).sort((a, b) => b.at - a.at)), () => cb([])); },
-    async answerQuestion(id, answer) { await updateDoc(doc(db, "questions", id), { answer, status: "answered", answeredAt: ts() }); },
+    watchMyQuestions(cb, onError) {
+      return onSnapshot(query(collection(db, "questions"), where("uid", "==", api.user.uid)), snap => cb(questions(snap)), onError);
+    },
+    watchQuestions(cb, onError) {
+      return onSnapshot(collection(db, "questions"), snap => cb(questions(snap)), onError);
+    },
+    async answerQuestion(id, answer) {
+      const ref = doc(db, "questions", id), answeredBy = api.user.uid;
+      return F.runTransaction(db, async tx => {
+        const existing = await tx.get(ref);
+        if (!existing.exists()) throw new Error("Inquiry is no longer available");
+        if (existing.data().answer) return false;
+        tx.update(ref, { answer, status: "answered", answeredAt: ts(), answeredBy });
+        return true;
+      });
+    },
 
     watchScores(round, cb) { return onSnapshot(query(collection(db, "scores"), where("round", "==", round)), s => cb(rows(s)), () => cb([])); },
     async saveScore(round, team, crit) {
@@ -199,7 +217,15 @@ function demoBackend() {
     async askQuestion(text) { D.questions.push({ id: "q" + Date.now(), uid: api.user.uid, text, at: Date.now(), status: "open" }); save(); },
     watchMyQuestions(cb) { return sub(() => cb(D.questions.filter(q => q.uid === api.user?.uid).sort((a, b) => b.at - a.at))); },
     watchQuestions(cb) { return sub(() => cb([...D.questions].sort((a, b) => b.at - a.at))); },
-    async answerQuestion(id, answer) { const q = D.questions.find(q => q.id === id); if (q) { q.answer = answer; q.status = "answered"; } save(); },
+    async answerQuestion(id, answer) {
+      if (!D.staff[api.user.uid]) throw new Error("Only staff can answer");
+      const q = D.questions.find(question => question.id === id);
+      if (!q) throw new Error("Inquiry is no longer available");
+      if (q.answer) return false;
+      Object.assign(q, { answer, status: "answered", answeredAt: Date.now(), answeredBy: api.user.uid });
+      save();
+      return true;
+    },
     watchScores(round, cb) { return sub(() => cb(Object.entries(D.scores).filter(([, s]) => s.round === round).map(([id, s]) => ({ id, ...s })))); },
     async saveScore(round, team, crit) { D.scores[`${round}_${team}_${api.user.uid}`] = { round, team, crit, judge: api.user.uid, at: Date.now() }; save(); },
     watchStaff(cb) { return sub(() => cb(Object.entries(D.staff).map(([id, s]) => ({ id, ...s })))); },

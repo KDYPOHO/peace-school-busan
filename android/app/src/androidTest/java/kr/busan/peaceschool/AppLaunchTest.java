@@ -22,24 +22,138 @@ public class AppLaunchTest {
         assertEquals(36, context.getApplicationInfo().targetSdkVersion);
 
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
-            long deadline = SystemClock.elapsedRealtime() + 30_000;
-            String result = null;
-            while (SystemClock.elapsedRealtime() < deadline && !"true".equals(result)) {
-                CountDownLatch callback = new CountDownLatch(1);
-                AtomicReference<String> value = new AtomicReference<>();
-                scenario.onActivity(activity -> activity.getBridge().getWebView().evaluateJavascript(
-                    "document.title === '평화 학교' && !!document.querySelector('#authForm') && " +
-                        "(document.querySelector('.auth img.signature')?.naturalWidth || 0) > 0",
-                    response -> {
-                        value.set(response);
-                        callback.countDown();
-                    }
-                ));
-                assertTrue("WebView JavaScript did not respond", callback.await(5, TimeUnit.SECONDS));
-                result = value.get();
-                if (!"true".equals(result)) SystemClock.sleep(300);
-            }
-            assertEquals("The packaged sign-in screen and logo did not render", "true", result);
+            assertEventually(scenario, "Packaged sign-in screen and logo", """
+                document.title === '평화 학교' && !!document.querySelector('#authForm') &&
+                (document.querySelector('.auth img.signature')?.naturalWidth || 0) > 0
+                """);
         }
+    }
+
+    @Test
+    public void sendsInquiryAndReplyAndKeepsOneCameraPreview() throws InterruptedException {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            assertEventually(scenario, "Local demo login in airplane mode", """
+                !!document.querySelector('#authForm') && document.body.textContent.includes('체험 모드')
+                """);
+            evaluate(scenario, """
+                (() => {
+                  const participant = {uid:'qa_participant',email:'participant@example.invalid'};
+                  const staff = {uid:'qa_staff',email:'staff@example.invalid'};
+                  sessionStorage.setItem('qaAccounts', JSON.stringify({participant,staff}));
+                  localStorage.setItem('psb_demo_v1', JSON.stringify({
+                    me:participant, staff:{qa_staff:{label:'시험 운영진'}},
+                    users:{qa_participant:{name:'시험 참가자',no:'BS27-QA0001',region:'부산',mode:'onsite',privacyVersion:'2027-01',termsVersion:'2027-01'}},
+                    attendance:{}, deepApps:{}, notices:[], questions:[], scores:{}
+                  }));
+                  location.reload();
+                })()
+                """);
+            assertEventually(scenario, "Participant navigation", "!!document.querySelector('[data-tab=att]')");
+            evaluate(scenario, "document.querySelector('[data-tab=att]').click()");
+            assertEventually(scenario, "Static participant QR", """
+                !!document.querySelector('.qr-pass') && !document.querySelector('.flip') &&
+                getComputedStyle(document.body).touchAction === 'manipulation'
+                """);
+            evaluate(scenario, """
+                document.querySelector('#attendanceHelp').click();
+                document.querySelector('#helpText').value = '강의 출석을 확인해 주세요.';
+                document.querySelector('#helpText').dispatchEvent(new Event('input', {bubbles:true}));
+                document.querySelector('#helpForm').requestSubmit();
+                """);
+            assertEventually(scenario, "Participant sees sent inquiry and pending state", """
+                document.querySelector('main').textContent.includes('답변 대기') &&
+                document.querySelector('.inquiry-text')?.textContent === '강의 출석을 확인해 주세요.'
+                """);
+            switchAccount(scenario, "staff");
+            assertEventually(scenario, "Staff dashboard", "!!document.querySelector('[data-tab=noti]')");
+            evaluate(scenario, "document.querySelector('[data-tab=noti]').click()");
+            assertEventually(scenario, "Staff sees inquiry reply form", "!!document.querySelector('[data-ans]')");
+            evaluate(scenario, """
+                (() => {
+                  const form = document.querySelector('[data-ans]');
+                  form.querySelector('textarea').value = '출석 내역을 확인했습니다.';
+                  form.requestSubmit();
+                })()
+                """);
+            assertEventually(scenario, "Staff sees answer count", """
+                document.querySelector('[data-help-filter=answered]')?.textContent.includes('1건')
+                """);
+            evaluate(scenario, """
+                localStorage.setItem('psb_camNotice','true');
+                window.Html5Qrcode = class {
+                  constructor(id) { this.host = document.getElementById(id); }
+                  async start() { this.host.append(document.createElement('video')); }
+                  async stop() { sessionStorage.setItem('qaCameraStopped','yes'); }
+                  clear() { this.host.replaceChildren(); }
+                };
+                document.querySelector('[data-tab=scan]').click();
+                document.querySelector('#camBtn').click();
+                """);
+            assertEventually(scenario, "One visible camera and no animated placeholder", """
+                document.querySelectorAll('#reader video').length === 1 &&
+                !document.querySelector('#reader').hidden && !document.querySelector('#scanPh') &&
+                !document.querySelector('main').classList.contains('enter')
+                """);
+            evaluate(scenario, """
+                document.querySelector('#manualNo').value = 'BS27-QA0001';
+                document.querySelector('#manualForm').requestSubmit();
+                """);
+            assertEventually(scenario, "Manual attendance leaves the camera active", """
+                document.querySelector('#scanResult')?.textContent.includes('출석 완료') &&
+                document.querySelectorAll('#reader video').length === 1
+                """);
+            evaluate(scenario, "document.querySelector('[data-tab=dash]').click()");
+            assertEventually(scenario, "Leaving attendance releases the camera", """
+                !document.querySelector('#reader') && sessionStorage.getItem('qaCameraStopped') === 'yes'
+                """);
+            switchAccount(scenario, "participant");
+            assertEventually(scenario, "Participant navigation after returning", "!!document.querySelector('[data-tab=ai]')");
+            evaluate(scenario, "document.querySelector('[data-tab=ai]').click()");
+            assertEventually(scenario, "Participant sees staff reply", """
+                document.querySelector('.inquiry-reply')?.textContent.includes('출석 내역을 확인했습니다.')
+                """);
+            evaluate(scenario, """
+                localStorage.removeItem('psb_demo_v1');
+                localStorage.removeItem('psb_camNotice');
+                sessionStorage.removeItem('qaAccounts');
+                sessionStorage.removeItem('qaCameraStopped');
+                location.reload();
+                """);
+        }
+    }
+
+    private void switchAccount(ActivityScenario<MainActivity> scenario, String role)
+        throws InterruptedException {
+        evaluate(scenario, """
+            (() => {
+              const data = JSON.parse(localStorage.getItem('psb_demo_v1'));
+              data.me = JSON.parse(sessionStorage.getItem('qaAccounts')).%s;
+              localStorage.setItem('psb_demo_v1', JSON.stringify(data));
+              localStorage.removeItem('psb_role');
+              location.reload();
+            })()
+            """.formatted(role));
+    }
+
+    private void assertEventually(ActivityScenario<MainActivity> scenario, String description, String condition)
+        throws InterruptedException {
+        long deadline = SystemClock.elapsedRealtime() + 30_000;
+        do {
+            if ("true".equals(evaluate(scenario, "Boolean(" + condition + ")"))) return;
+            SystemClock.sleep(250);
+        } while (SystemClock.elapsedRealtime() < deadline);
+        assertTrue(description, false);
+    }
+
+    private String evaluate(ActivityScenario<MainActivity> scenario, String script)
+        throws InterruptedException {
+        CountDownLatch callback = new CountDownLatch(1);
+        AtomicReference<String> value = new AtomicReference<>();
+        scenario.onActivity(activity -> activity.getBridge().getWebView().evaluateJavascript(script, response -> {
+            value.set(response);
+            callback.countDown();
+        }));
+        assertTrue("WebView JavaScript did not respond", callback.await(5, TimeUnit.SECONDS));
+        return value.get();
     }
 }

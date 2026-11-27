@@ -146,12 +146,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#14213D;color:#fff;padding:10px 16px;border-radius:12px;font-size:.85rem;z-index:20;max-width:calc(100% - 32px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .sheet-bg{position:fixed;inset:0;background:rgba(8,16,32,.45);z-index:30;display:flex;align-items:flex-end;justify-content:center}
 .sheet{background:var(--surface);width:min(420px,100%);max-height:80vh;overflow:auto;border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px))}
-.scan{aspect-ratio:1/1;max-width:100%;border-radius:14px;background:#0E1626;position:relative;overflow:hidden;display:grid;place-items:center}
-.scan .frame{width:58%;aspect-ratio:1/1;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 999px rgba(0,0,0,.35)}
-.scan .line{position:absolute;left:21%;right:21%;height:2px;background:var(--gold);top:30%;animation:scan 2s ease-in-out infinite alternate}
-.scan .cap{position:absolute;bottom:10px;left:0;right:0;text-align:center;color:#fff;font-size:.78rem;opacity:.85}
-@keyframes scan{to{top:70%}}
-@media (prefers-reduced-motion: reduce){.scan .line{animation:none}.bar i{transition:none}}
+@media (prefers-reduced-motion: reduce){.bar i{transition:none}}
 .note{font-size:.72rem;color:var(--muted);text-align:center;padding:4px 0 8px}
 
 /* ---------- Motion ---------- */
@@ -209,13 +204,6 @@ nav.tabs button[aria-current="page"] svg{animation:pop .45s var(--spring)}
 @keyframes draw{to{stroke-dashoffset:0}}
 @keyframes fadeIn{from{opacity:0}}
 @keyframes fadeOut{to{opacity:0;visibility:hidden}}
-/* scanner hit */
-.scan.hit .frame{border-color:#5BD69A;animation:hit .5s var(--spring)}
-.scan.hit::after{content:"✓";position:absolute;font-size:4rem;color:#5BD69A;font-weight:700;animation:pop .5s var(--spring)}
-@keyframes hit{50%{transform:scale(1.08)}}
-/* list item enter */
-.li.new{animation:slideIn .5s var(--ease)}
-@keyframes slideIn{from{opacity:0;transform:translateX(-16px);background:var(--gold-soft)}}
 /* typing */
 .typing{display:inline-flex;gap:4px;padding:12px 14px}
 .typing i{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:bob 1s infinite}
@@ -295,16 +283,6 @@ nav.tabs button[aria-current="page"] svg{transform:translateY(-2px);filter:drop-
 .hero .seal{position:absolute;top:16px;right:16px;width:56px;height:56px;object-fit:contain;z-index:1}
 .hero.has-coin > :not(.seal){padding-right:66px}
 .hero.has-coin .row{padding-right:0!important}
-/* QR flip */
-.flip{perspective:900px;width:220px;height:220px;margin:6px auto 0;cursor:pointer}
-.flip-in{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .8s var(--spring)}
-.flip.on .flip-in{transform:rotateY(180deg)}
-.flip .side{position:absolute;inset:0;backface-visibility:hidden;border-radius:18px;display:grid;place-items:center;box-shadow:0 18px 30px -14px rgba(10,30,70,.5)}
-.flip .side.front{background:#fff;padding:14px}
-.flip .side.front svg{width:100%;height:100%}
-.flip .side.back{transform:rotateY(180deg);background:linear-gradient(145deg,#2A5BA8,#132E5E);color:#fff;padding:18px;text-align:left;align-content:center;gap:4px;font-size:.82rem}
-.flip .side.back b{font-family:var(--f-serif);font-size:1.15rem}
-.flip .side.back img{width:44px;height:44px;object-fit:contain;margin-bottom:6px}
 .success svg.ok{animation:okIn .7s var(--spring) both}
 @keyframes okIn{from{transform:perspective(500px) rotateX(70deg) scale(.6);opacity:0}}
 .card > :not(.seal),.stat > *{position:relative;z-index:1}
@@ -315,7 +293,6 @@ nav.tabs button[aria-current="page"] svg{transform:translateY(-2px);filter:drop-
 .arch:hover .cube i{transform:rotateX(0) rotateY(0) translateY(-3px)}
 .arch .go{margin-left:auto;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--glass-2);border:1px solid var(--glass-line);transition:transform .3s var(--spring)}
 .arch:hover .go{transform:translateX(3px)}
-@media (prefers-reduced-motion: reduce){.flip-in{transition:none}}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;animation-delay:0s!important;transition-duration:.01ms!important}
   .splash{display:none}

@@ -82,6 +82,7 @@ const S = {
   tab: { p: "home", a: "dash" },
   myAtt: [], notices: [], deepApp: null, myQs: [],
   users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [],
+  myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpSending: false, answerDrafts: {}, answerSending: new Set(), helpFilter: "open", helpLimit: 25,
   judge: { round: "예선", team: 0 }, scanLecture: null, chat: [], authMode: "login", onboardStep: 0, draft: {}
 };
 let unsubs = [], staffUnsubs = [];
@@ -99,7 +100,7 @@ applyPrefs();
 /* ───────── 화면 그리기 ───────── */
 const TABS = {
   p: [["home", "홈", "home"], ["sched", "일정", "cal"], ["att", "출석", "qr"], ["ai", "도우미", "ai"], ["me", "내 정보", "me"]],
-  a: [["dash", "현황", "dash"], ["people", "참가자", "users"], ["scan", "출석", "qr"], ["noti", "공지", "send"], ["deep", "심화", "star"], ["judge", "심사", "award"]]
+  a: [["dash", "현황", "dash"], ["people", "참가자", "users"], ["scan", "출석", "qr"], ["noti", "공지·문의", "send"], ["deep", "심화", "star"], ["judge", "심사", "award"]]
 };
 let lastInd = null, pending = false;
 
@@ -146,10 +147,15 @@ function render(anim) {
   if (S.role === "p" && !S.profile) v.innerHTML = onboardCard();
   else v.innerHTML = VIEWS[cur]();
   [...v.children].forEach((c, i) => c.style.setProperty("--i", i));
-  if (anim && !RM) { v.classList.remove("enter", "back"); void v.offsetWidth; v.classList.add("enter"); if (anim === "back") v.classList.add("back"); }
+  v.classList.remove("enter", "back");
+  if (anim && !RM && cur !== "scan") {
+    void v.offsetWidth;
+    v.classList.add("enter");
+    if (anim === "back") v.classList.add("back");
+  }
   placeInd();
   if (S.role === "p" && !S.profile) bindOnboard(); else BIND[cur] && BIND[cur]();
-  if (anim) animateIn(v);
+  if (anim && cur !== "scan") animateIn(v);
   updateBell();
   pending = false;
 }
@@ -166,7 +172,7 @@ document.addEventListener("focusout", () => setTimeout(() => { if (pending) refr
 function go(t) {
   const tabs = TABS[S.role].map(x => x[0]);
   const dir = tabs.indexOf(t) < tabs.indexOf(S.tab[S.role]) ? "back" : "fwd";
-  if (S.tab[S.role] === "scan" && t !== "scan") stopScanner();
+  if (S.tab[S.role] === "scan") { if (t === "scan") return; stopScanner(); }
   S.tab[S.role] = t; render(dir); $("#view").scrollTop = 0; $("#view").focus({ preventScroll: true });
 }
 document.addEventListener("click", e => {
@@ -433,6 +439,11 @@ const orgKey = u => (u.orgRegion && u.orgRegion !== ORG_NONE ? u.orgRegion : ORG
 function lectureCard(l, tag) {
   return `<h2>${esc(l.title)}</h2><p>${fmtDate(l.date)} ${l.start}~${l.end} · ${esc(VENUE)}</p>`;
 }
+function inquiryReply(q) {
+  if (!q.answer) return "";
+  return `<div class="ai-box inquiry-reply"><b>운영진 답변</b><div class="inquiry-text">${esc(q.answer)}</div>${q.answeredAt ? `<div class="small muted">${fmtTime(q.answeredAt)}</div>` : ""}</div>`;
+}
+
 const VIEWS = {
   home() {
     const att = myAttended(), c = att.length, need = Math.max(0, PASS_COUNT - c), rem = remainingFor(att);
@@ -490,10 +501,8 @@ const VIEWS = {
       <div class="eyebrow">${tl ? `${tl.n}강 현장 출석 · 개인 QR` : "개인 QR 수강증"}</div>
       <h2 style="margin:6px 0 2px">${esc(p.name)}</h2>
       <div class="small muted">수강번호 ${esc(p.no)}</div>
-      <div class="flip" id="flip" role="button" tabindex="0" aria-label="QR 카드 뒤집기"><div class="flip-in">
-        <div class="side front">${qrSvg("PSB1:" + S.user.uid)}</div>
-        <div class="side back"><img src="img/symbol.png" alt=""><span style="opacity:.75">${APP.year} ${esc(APP.name)} 수강증</span><b>${esc(p.name)}</b><span>${esc(p.no)} · 기본과정</span><span>출석 ${att.length} / ${LECTURES.length}강</span></div>
-      </div></div>
+      <div class="qr qr-pass" role="img" aria-label="출석용 QR 수강증">${qrSvg("PSB1:" + S.user.uid)}</div>
+      <button class="btn ghost mini" id="copyEnrollmentNo" type="button">수강번호 복사</button>
       <p class="small muted" style="margin:12px 0">입구에서 운영진에게 이 QR을 보여 주세요. 찍는 순간 출석이 기록돼요. 화면을 밝게 하면 더 잘 찍혀요.</p>
       ${done ? '<span class="pill p-ok" style="font-size:.85rem;padding:6px 12px">✓ 오늘 출석 완료</span>' : ""}
     </section>
@@ -505,21 +514,32 @@ const VIEWS = {
     <section class="card">
       <h2>내 출결</h2>
       <div class="row" style="gap:6px">${LECTURES.map(l => `<div class="dot ${att.includes(l.n) ? "done" : lectureState(l) === "today" ? "now" : ""}" style="flex:1" title="${l.n}강">${l.n}</div>`).join("")}</div>
-      <p class="small muted" style="margin:10px 0 0">${att.length >= PASS_COUNT ? "수료 요건을 채웠어요." : `수료까지 ${PASS_COUNT - att.length}강 남았어요.`} 출결이 다르게 보이면 도우미 탭에서 운영진에게 알려 주세요.</p>
+      <p class="small muted" style="margin:10px 0 0">${att.length >= PASS_COUNT ? "수료 요건을 채웠어요." : `수료까지 ${PASS_COUNT - att.length}강 남았어요.`}</p>
+      <button class="btn ghost block" id="attendanceHelp" type="button">출석 문의하기</button>
     </section>`;
   },
   ai() {
     if (!S.chat.length) S.chat.push({ who: "ai", text: `안녕하세요, ${S.profile.name}님. 평화학교 도우미예요. 공식 안내 범위 안에서 답하고, 모르는 건 운영진에게 바로 전달해 드려요.` });
     return `
+    <section class="card inquiry-card">
+      <h2>운영진에게 직접 문의</h2>
+      <form class="form" id="helpForm">
+        <label class="f">문의 내용<textarea id="helpText" rows="3" maxlength="500" required placeholder="예: 2강 온라인 출석 내역을 확인해 주세요.">${esc(S.helpDraft)}</textarea></label>
+        <p class="small muted">문의는 본인과 운영진만 볼 수 있어요. 비밀번호나 주민등록번호는 적지 마세요.</p>
+        <p class="err" id="helpError" role="alert" hidden></p>
+        <button class="btn" type="submit" ${S.helpSending ? "disabled" : ""}>${S.helpSending ? "보내는 중…" : "문의 보내기"}</button>
+      </form>
+    </section>
+    <section class="card inquiry-card">
+      <h2>내 문의</h2>
+      ${S.myQuestionsError ? '<p class="err" role="status">문의 내역을 불러오지 못했어요. 연결을 확인한 뒤 앱을 다시 열어 주세요.</p>' : ""}
+      <div class="list">${S.myQs.map(q => `<article class="li"><div class="body"><div class="row between"><span class="small muted">${fmtTime(q.at)}</span><span class="pill ${q.answer ? "p-ok" : "p-mute"}">${q.answer ? "답변 완료" : "답변 대기"}</span></div><div class="inquiry-text">${esc(q.text)}</div>${inquiryReply(q)}</div></article>`).join("") || '<p class="small muted">보낸 문의와 운영진 답변을 여기에서 확인할 수 있어요.</p>'}</div>
+    </section>
     <section class="card">
       <div class="row between"><h2 style="margin:0">학습 도우미</h2><span class="small muted">공식 안내 기반 · 무료</span></div>
       <div class="chat" id="chat" style="margin-top:10px">${S.chat.map((m, k) => `<div class="msg ${m.who}" ${k < S.chat.length - 1 ? 'style="animation:none"' : ""}>${esc(m.text)}${m.src ? `<small>근거: ${esc(m.src)}</small>` : ""}${m.ask ? `<div style="margin-top:8px"><button class="btn mini" data-askq="${k}">운영진에게 물어보기</button></div>` : ""}</div>`).join("")}</div>
       <div class="chips" style="margin:12px 0 10px">${FAQ_CHIPS.map(q => `<button class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
       <form class="composer" id="chatForm"><input id="chatIn" maxlength="300" placeholder="수료, 일정, 출석, 심화과정 등을 물어보세요" autocomplete="off" aria-label="질문"><button class="btn" type="submit">보내기</button></form>
-    </section>
-    <section class="card">
-      <h2>내 문의</h2>
-      ${S.myQs.length ? `<div class="list">${S.myQs.map(q => `<div class="li"><div class="body"><div class="small k">${esc(q.text)}</div>${q.answer ? `<div class="ai-box" style="margin-top:6px"><b>운영진 답변</b><div>${esc(q.answer)}</div></div>` : '<div class="small muted">답변을 기다리고 있어요</div>'}</div><span class="pill ${q.answer ? "p-ok" : "p-mute"}">${q.answer ? "답변" : "대기"}</span></div>`).join("")}</div>` : '<p class="small muted" style="margin:0">도우미가 답하지 못한 질문은 여기에 모이고, 운영진 답변이 달리면 함께 보여요.</p>'}
     </section>`;
   },
   me() {
@@ -571,6 +591,10 @@ const VIEWS = {
       <div class="stat"><b data-count="${st.passed}">${st.passed}</b><span>수료 요건 충족</span></div>
       <div class="stat"><b data-count="${S.deepApps.length}">${S.deepApps.length}</b><span>심화 지원 / 정원 ${DEEP.cap}</span></div>
     </div>
+    <section class="card inquiry-card">
+      <div class="row between"><h2>참가자 문의</h2><span class="pill p-warn">답변 대기 ${S.questions.filter(q => !q.answer).length}건</span></div>
+      <button class="btn ghost block" data-go="noti">문의함 열기</button>
+    </section>
     <section class="card">
       <div class="row between"><h2 style="margin:0">주의가 필요한 참가자</h2><span class="pill p-warn">자동 계산</span></div>
       <p class="small muted" style="margin:4px 0 10px">남은 강의를 모두 들어야 수료할 수 있는 참가자 <b>${st.risk.length}</b>명, 이미 수료가 어려운 참가자 <b>${st.lost.length}</b>명</p>
@@ -624,18 +648,31 @@ const VIEWS = {
       <div class="row between" style="margin:10px 0 6px"><span class="num"><b style="font-size:1.4rem" id="scanCount">0</b> / ${ONSITE_CAP}명 현장</span><span class="small muted" id="scanOnline"></span></div>
       <div class="bar"><i id="scanBar" style="width:0%"></i></div>
     </section>
-    <section class="card">
+    <section class="card scan-card">
+      <h2>QR 출석</h2>
+      <p class="small muted scan-hint">카메라를 켜고 참가자의 QR 수강증을 화면 중앙에 맞춰 주세요.</p>
       <div id="reader" hidden></div>
-      <div class="scan" id="scanPh"><div class="frame"></div><div class="line"></div><div class="cap">카메라를 켜고 참가자 QR을 사각형 안에 맞춰 주세요</div></div>
-      <div class="row" style="gap:8px;margin-top:12px"><button class="btn block" id="camBtn">카메라 켜기</button></div>
-      <form class="composer" id="manualForm" style="margin-top:10px"><input id="manualNo" placeholder="수강번호로 직접 입력 (예: BS27-AB12CD)" autocapitalize="characters" aria-label="수강번호"><button class="btn" type="submit">출석</button></form>
-      <p class="small muted" style="margin:8px 0 0">같은 사람을 두 번 찍어도 한 번만 기록돼요. 휴대폰을 잃어버린 참가자는 수강번호나 참가자 탭에서 처리해요.</p>
+      <button class="btn block" id="camBtn" type="button" aria-controls="reader" aria-pressed="false">카메라 켜기</button>
+      <p class="scan-result small" id="scanResult" role="status" aria-live="polite" hidden></p>
+      <form class="composer" id="manualForm"><input id="manualNo" maxlength="24" required placeholder="수강번호 (예: BS27-AB12CD)" autocomplete="off" autocapitalize="characters" aria-label="수강번호"><button class="btn ghost" type="submit">직접 출석</button></form>
     </section>
     <section class="card"><h2>최근 출석</h2><div class="list small" id="recent"></div></section>`;
   },
   noti() {
-    const open = S.questions.filter(q => !q.answer);
+    const open = S.questions.filter(q => !q.answer).sort((a, b) => a.at - b.at);
+    const answered = S.questions.filter(q => q.answer).sort((a, b) => (b.answeredAt || b.at) - (a.answeredAt || a.at));
+    const shown = S.helpFilter === "open" ? open : answered;
     return `
+    <section class="card inquiry-card">
+      <h2>참가자 문의함</h2>
+      ${S.staffQuestionsError ? '<p class="err" role="status">문의 목록을 불러오지 못했어요. 연결과 운영진 계정을 확인해 주세요.</p>' : ""}
+      <div class="chips inquiry-filters">${[["open", "답변 대기", open.length], ["answered", "답변 완료", answered.length]].map(([id, label, count]) => `<button class="chip" data-help-filter="${id}" aria-pressed="${id === S.helpFilter}">${label} ${count}건</button>`).join("")}</div>
+      <div class="list">${shown.slice(0, S.helpLimit).map(q => {
+        const u = S.users.find(x => x.uid === q.uid), sending = S.answerSending.has(q.id);
+        return `<article class="li"><div class="body"><div class="small muted">${esc(u ? u.name + " · " + u.no : "참가자")} · ${fmtTime(q.at)}</div><div class="inquiry-text">${esc(q.text)}</div>${q.answer ? inquiryReply(q) : `<form class="form inquiry-reply" data-ans="${esc(q.id)}"><label class="f">답변<textarea rows="3" maxlength="500" required>${esc(S.answerDrafts[q.id])}</textarea></label><p class="err" role="alert" hidden></p><button class="btn" type="submit" ${sending ? "disabled" : ""}>${sending ? "보내는 중…" : "답변 보내기"}</button></form>`}</div></article>`;
+      }).join("") || `<p class="small muted">${S.helpFilter === "open" ? "답변을 기다리는 문의가 없어요." : "답변한 문의가 없어요."}</p>`}</div>
+      ${shown.length > S.helpLimit ? '<button class="btn ghost block" id="moreInquiries">문의 더 보기</button>' : ""}
+    </section>
     <section class="card">
       <h2>공지 올리기</h2>
       <form class="form" id="notiForm">
@@ -646,10 +683,6 @@ const VIEWS = {
         <button class="btn" type="submit">공지 올리기</button>
       </form>
       <p class="small muted" style="margin:10px 0 0">공지는 참가자 앱 첫 화면과 공지함에 바로 보여요. 휴대폰 푸시 알림은 2단계에서 붙일 예정이에요.</p>
-    </section>
-    <section class="card">
-      <div class="row between"><h2 style="margin:0">문의함</h2><span class="pill ${open.length ? "p-warn" : "p-ok"}">${open.length ? `답변 대기 ${open.length}` : "모두 답변"}</span></div>
-      <div class="list" style="margin-top:8px">${S.questions.slice(0, 40).map(q => { const u = S.users.find(x => x.uid === q.uid); return `<div class="li"><div class="body"><div class="small muted">${esc(u ? u.name + " · " + u.no : "참가자")} · ${fmtTime(q.at)}</div><div class="k small">${esc(q.text)}</div>${q.answer ? `<div class="ai-box" style="margin-top:6px"><b>답변</b><div>${esc(q.answer)}</div></div>` : `<form class="composer" data-ans="${esc(q.id)}" style="margin-top:6px"><input placeholder="답변 쓰기" maxlength="500" aria-label="답변"><button class="btn" type="submit">답변</button></form>`}</div></div>`; }).join("") || '<p class="small muted">아직 문의가 없어요.</p>'}</div>
     </section>
     <section class="card">
       <h2>올린 공지</h2>
@@ -910,48 +943,118 @@ function userSheet(uid) {
 }
 
 /* ───────── QR 스캐너 ───────── */
-let scanner = null, lastCode = "", lastAt = 0;
-function loadScript(src) { return new Promise((res, rej) => { if ([...document.scripts].some(s => s.src === src)) return res(); const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+let camera = null, cameraClosing = Promise.resolve(), qrLibrary = null;
+const CAMERA_SCRIPT = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+function loadQrLibrary() {
+  if (window.Html5Qrcode) return Promise.resolve();
+  if (!qrLibrary) qrLibrary = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = CAMERA_SCRIPT;
+    script.onload = resolve;
+    script.onerror = () => {
+      script.remove();
+      qrLibrary = null;
+      reject(new Error("QR scanner library unavailable"));
+    };
+    document.head.appendChild(script);
+  });
+  return qrLibrary;
+}
+function showScanResult(message, state = "info") {
+  const status = $("#scanResult");
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.state = state;
+  status.hidden = !message;
+}
+function setCameraButton(button, state) {
+  button.disabled = state === "opening";
+  button.setAttribute("aria-pressed", String(state === "on"));
+  button.textContent = state === "on" ? "카메라 끄기" : state === "opening" ? "카메라 준비 중…" : "카메라 켜기";
+}
 async function startScanner() {
+  const button = $("#camBtn"), reader = $("#reader");
+  if (camera || !button || !reader || document.hidden || S.role !== "a" || S.tab.a !== "scan") return;
   if (!LS.get("camNotice", false)) {
-    sheet(`<h2 style="margin:0 0 6px;font-size:1.05rem">카메라 접근권한 안내</h2><p class="small" style="margin:0 0 8px"><b>[선택] 카메라</b>: 참가자 QR 수강증을 찍어 출석을 기록할 때만 사용해요. 영상은 저장하거나 전송하지 않아요.</p><p class="small muted" style="margin:0 0 12px">허용하지 않아도 수강번호 직접 입력으로 출석 처리를 할 수 있어요. 허용은 휴대폰 설정에서 언제든 철회할 수 있어요.</p><button class="btn block" id="camOk">확인하고 카메라 켜기</button>`);
-    $("#camOk").onclick = () => { LS.set("camNotice", true); closeSheet(); startScanner(); };
+    sheet(`<h2>카메라 접근권한 안내</h2><p class="small">참가자의 QR 수강증을 읽을 때만 카메라를 사용해요. 영상은 저장하거나 전송하지 않아요.</p><p class="small muted">수강번호로도 출석을 처리할 수 있어요. 카메라 권한은 휴대폰 설정에서 바꿀 수 있어요.</p><button class="btn block" id="camOk">확인하고 카메라 켜기</button>`);
+    $("#camOk").onclick = () => { LS.set("camNotice", true); closeSheet(); void startScanner(); };
     return;
   }
-  const btn = $("#camBtn"); btn.disabled = true; btn.textContent = "카메라 준비 중…";
+  const session = { reader, button, scanner: null, started: false, lastCode: "", lastAt: 0, checking: false };
+  camera = session;
+  showScanResult("");
+  setCameraButton(button, "opening");
+  session.ready = (async () => {
+    await cameraClosing;
+    await loadQrLibrary();
+    if (camera !== session) return;
+    reader.hidden = false;
+    session.scanner = new window.Html5Qrcode("reader", { verbose: false });
+    await session.scanner.start({ facingMode: "environment" }, {
+      fps: 10,
+      qrbox(w, h) { const size = Math.floor(Math.min(w, h) * .7); return { width: size, height: size }; }
+    }, text => void onScan(session, text), () => {});
+    session.started = true;
+  })();
   try {
-    await loadScript("https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js");
-    $("#scanPh").hidden = true; $("#reader").hidden = false;
-    scanner = new window.Html5Qrcode("reader", { verbose: false });
-    await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: (w, h) => { const s = Math.floor(Math.min(w, h) * .7); return { width: s, height: s }; } }, onScan, () => {});
-    btn.disabled = false; btn.textContent = "카메라 끄기"; btn.onclick = () => { stopScanner(); render(); };
-  } catch (e) {
-    console.error(e); scanner = null;
-    $("#scanPh").hidden = false; $("#reader").hidden = true;
-    btn.disabled = false; btn.textContent = "카메라 켜기";
-    toast("카메라를 쓸 수 없어요. 설정에서 카메라 권한을 허용해 주세요. 수강번호 입력은 계속 쓸 수 있어요.", 4200);
+    await session.ready;
+    if (camera === session) setCameraButton(button, "on");
+  } catch {
+    if (camera === session) {
+      stopScanner();
+      showScanResult("카메라를 열지 못했어요. 연결과 카메라 권한을 확인하거나 수강번호를 입력해 주세요.", "warn");
+    }
   }
 }
-function stopScanner() { if (scanner) { const s = scanner; scanner = null; s.stop().then(() => s.clear()).catch(() => {}); } }
-async function onScan(text) {
-  const now = Date.now();
-  if (text === lastCode && now - lastAt < 4000) return;
-  lastCode = text; lastAt = now;
-  const m = /^PSB1:([A-Za-z0-9_-]{6,128})$/.exec(text.trim());
-  if (!m) { toast("평화학교 QR이 아니에요"); return; }
-  await checkIn(m[1], "qr");
+function stopScanner() {
+  const session = camera;
+  if (!session) return;
+  camera = null;
+  // If permission is still pending, release its stream as soon as startup settles.
+  const waitForRelease = session.ready.catch(() => {}).then(async () => {
+    const stream = session.reader.querySelector("video")?.srcObject;
+    try {
+      if (session.started) await session.scanner.stop();
+      session.scanner?.clear();
+    } catch {
+      session.reader.replaceChildren();
+    } finally {
+      stream?.getTracks().forEach(track => track.stop());
+    }
+  });
+  cameraClosing = waitForRelease;
+  session.reader.hidden = true;
+  setCameraButton(session.button, "off");
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden) stopScanner(); });
+window.addEventListener("pagehide", stopScanner);
+async function onScan(session, rawText) {
+  if (camera !== session || !session.started || session.checking) return;
+  const text = rawText.trim(), now = Date.now();
+  if (text === session.lastCode && now - session.lastAt < 4000) return;
+  session.lastCode = text;
+  session.lastAt = now;
+  const match = /^PSB1:([A-Za-z0-9_-]{6,128})$/.exec(text);
+  if (!match) { showScanResult("평화학교 QR 수강증을 화면 중앙에 맞춰 주세요.", "warn"); return; }
+  session.checking = true;
+  try { await checkIn(match[1], "qr"); }
+  finally { session.checking = false; }
 }
 async function checkIn(uid, method) {
   const u = S.users.find(x => x.uid === uid);
-  if (!u) { toast("등록되지 않은 참가자예요. 수강 신청 여부를 확인해 주세요."); navigator.vibrate && navigator.vibrate([60, 60, 60]); return; }
+  if (!u) { showScanResult("등록되지 않은 참가자예요. 수강 신청 여부를 확인해 주세요.", "warn"); return false; }
+  const n = S.scanLecture, status = $("#scanResult");
   try {
-    const r = await B.recordAttendance(uid, S.scanLecture, method);
-    navigator.vibrate && navigator.vibrate(r.duplicate ? [40, 40, 40] : 80);
-    const rc = $("#recent");
-    rc && rc.insertAdjacentHTML("afterbegin", `<div class="li new"><span class="pill ${r.duplicate ? "p-warn" : "p-ok"}">${r.duplicate ? "중복" : "방금"}</span><div class="body">${esc(u.name)} · ${esc(u.no)}</div></div>`);
-    toast(r.duplicate ? `${u.name}님은 이미 출석했어요` : `${u.name}님 ${S.scanLecture}강 출석`);
-    const sc = $("#reader"); if (sc && !r.duplicate && !RM) { sc.style.outline = "4px solid var(--ok)"; setTimeout(() => (sc.style.outline = ""), 500); }
-  } catch (e) { console.error(e); toast("기록하지 못했어요. 인터넷 연결을 확인해 주세요."); }
+    const r = await B.recordAttendance(uid, n, method);
+    if (status?.isConnected && S.scanLecture === n) {
+      showScanResult(r.duplicate ? `${u.name}님은 ${n}강 출석이 이미 기록되어 있어요.` : `${u.name}님 · ${n}강 출석 완료`, r.duplicate ? "warn" : "ok");
+      navigator.vibrate?.(r.duplicate ? [40, 40, 40] : 80);
+    }
+    return true;
+  } catch {
+    if (status?.isConnected && S.scanLecture === n) showScanResult("출석을 저장하지 못했어요. 인터넷에 연결한 뒤 다시 시도해 주세요.", "warn");
+    return false;
+  }
 }
 const PARTIAL = {
   scan() {
@@ -961,9 +1064,8 @@ const PARTIAL = {
     c.textContent = on; $("#scanBar").style.width = Math.min(100, on / ONSITE_CAP * 100) + "%";
     $("#scanOnline").textContent = `온라인 ${list.length - on}명 별도`;
     const rc = $("#recent");
-    if (rc && !rc.dataset.init) {
-      rc.dataset.init = 1;
-      rc.innerHTML = list.sort((a, b) => b.at - a.at).slice(0, 8).map(a => { const u = S.users.find(x => x.uid === a.uid); return `<div class="li"><span class="pill p-ok">${fmtTime(a.at).split(" ").pop()}</span><div class="body">${esc(u ? u.name + " · " + u.no : a.uid)} · ${a.method === "online" ? "온라인" : a.method === "manual" ? "수동" : "현장"}</div></div>`; }).join("") || '<p class="small muted">아직 출석한 사람이 없어요.</p>';
+    if (rc) {
+      rc.innerHTML = list.sort((a, b) => b.at - a.at).slice(0, 8).map(a => { const u = S.users.find(x => x.uid === a.uid); return `<div class="li"><span class="pill p-ok">${fmtTime(a.at).split(" ").pop()}</span><div class="body">${esc(u ? u.name + " · " + u.no : "참가자")} · ${a.method === "online" ? "온라인" : a.method === "manual" ? "수동" : "현장"}</div></div>`; }).join("") || '<p class="small muted">아직 출석한 사람이 없어요.</p>';
     }
   }
 };
@@ -979,8 +1081,8 @@ const BIND = {
   },
   sched() {},
   att() {
-    const f = $("#flip"), tg = () => f.classList.toggle("on");
-    f.onclick = tg; f.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tg(); } };
+    $("#copyEnrollmentNo").onclick = () => copyText(S.profile.no, "수강번호를 복사했어요");
+    $("#attendanceHelp").onclick = () => { go("ai"); $("#helpText").focus(); };
     const o = $("#onlineBtn");
     o && (o.onclick = async () => {
       const l = todayLecture();
@@ -991,6 +1093,39 @@ const BIND = {
     });
   },
   ai() {
+    const form = $("#helpForm"), field = $("#helpText");
+    field.oninput = () => { S.helpDraft = field.value; };
+    form.onsubmit = async event => {
+      event.preventDefault();
+      if (S.helpSending) return;
+      const text = field.value.trim(), error = $("#helpError"), button = form.querySelector("button");
+      error.hidden = true;
+      if (!text) { error.textContent = "문의 내용을 적어 주세요."; error.hidden = false; return; }
+      const uid = S.user.uid;
+      S.helpSending = true;
+      button.disabled = true;
+      button.textContent = "보내는 중…";
+      try {
+        await B.askQuestion(text);
+        if (S.user?.uid !== uid) return;
+        if (S.helpDraft.trim() === text) {
+          S.helpDraft = "";
+          if (field.value.trim() === text) field.value = "";
+        }
+        toast("문의가 접수됐어요. 내 문의에서 답변을 확인할 수 있어요.");
+      } catch {
+        if (S.user?.uid !== uid) return;
+        error.textContent = "문의를 보내지 못했어요. 인터넷을 확인하고 다시 보내 주세요.";
+        error.hidden = false;
+      } finally {
+        if (S.user?.uid === uid) {
+          S.helpSending = false;
+          if (error.isConnected && error.hidden) refresh();
+          button.disabled = false;
+          button.textContent = "문의 보내기";
+        }
+      }
+    };
     $$("[data-q]").forEach(b => (b.onclick = () => ask(b.dataset.q)));
     $("#chatForm").onsubmit = e => { e.preventDefault(); const v = $("#chatIn").value; $("#chatIn").value = ""; $("#chatIn").blur(); ask(v); };
     $$("[data-askq]").forEach(b => (b.onclick = async () => {
@@ -1031,13 +1166,23 @@ const BIND = {
     $$("[data-user]").forEach(b => (b.onclick = () => userSheet(b.dataset.user)));
   },
   scan() {
-    $("#scanL").onchange = e => { S.scanLecture = +e.target.value; const r = $("#recent"); delete r.dataset.init; PARTIAL.scan(); };
-    $("#camBtn").onclick = startScanner;
-    $("#manualForm").onsubmit = e => {
-      e.preventDefault(); const no = $("#manualNo").value.trim().toUpperCase();
+    $("#scanL").onchange = e => {
+      S.scanLecture = +e.target.value;
+      if (camera) camera.lastCode = "";
+      showScanResult("");
+      PARTIAL.scan();
+    };
+    $("#camBtn").onclick = () => { if (camera) stopScanner(); else void startScanner(); };
+    $("#manualForm").onsubmit = async e => {
+      e.preventDefault();
+      const form = e.currentTarget, field = $("#manualNo"), button = form.querySelector("button");
+      if (button.disabled) return;
+      const no = field.value.trim().toUpperCase();
       const u = S.users.find(x => String(x.no).toUpperCase() === no);
-      if (!u) return toast("그 수강번호를 찾지 못했어요");
-      $("#manualNo").value = ""; checkIn(u.uid, "manual");
+      if (!u) { showScanResult("수강번호를 찾지 못했어요. 번호를 확인해 주세요.", "warn"); return; }
+      button.disabled = true;
+      if (await checkIn(u.uid, "manual") && field.value.trim().toUpperCase() === no) field.value = "";
+      button.disabled = false;
     };
     PARTIAL.scan();
   },
@@ -1051,7 +1196,44 @@ const BIND = {
       catch (e2) { toast("올리지 못했어요"); }
     };
     $$("[data-delnoti]").forEach(b => (b.onclick = async () => { if (!(await confirmSheet("공지를 지울까요?", "참가자 앱에서도 바로 사라져요.", "삭제", true))) return; try { await B.deleteNotice(b.dataset.delnoti); toast("지웠어요"); } catch (e) { toast("지우지 못했어요"); } }));
-    $$("[data-ans]").forEach(f => (f.onsubmit = async e => { e.preventDefault(); const v = f.querySelector("input").value.trim(); if (!v) return; try { await B.answerQuestion(f.dataset.ans, v); toast("답변했어요"); } catch (e2) { toast("답변하지 못했어요"); } }));
+    $$("[data-help-filter]").forEach(button => {
+      button.onclick = () => { S.helpFilter = button.dataset.helpFilter; S.helpLimit = 25; render(); };
+    });
+    const more = $("#moreInquiries");
+    if (more) more.onclick = () => { S.helpLimit += 25; refresh(); };
+    $$("[data-ans]").forEach(form => {
+      const id = form.dataset.ans, field = form.querySelector("textarea"), button = form.querySelector("button"), error = form.querySelector(".err");
+      field.oninput = () => { S.answerDrafts[id] = field.value; };
+      form.onsubmit = async event => {
+        event.preventDefault();
+        if (S.answerSending.has(id)) return;
+        const text = field.value.trim();
+        error.hidden = true;
+        if (!text) { error.textContent = "답변 내용을 적어 주세요."; error.hidden = false; return; }
+        const uid = S.user.uid;
+        S.answerSending.add(id);
+        button.disabled = true;
+        button.textContent = "보내는 중…";
+        try {
+          const accepted = await B.answerQuestion(id, text);
+          if (S.user?.uid !== uid) return;
+          delete S.answerDrafts[id];
+          field.blur();
+          toast(accepted ? "참가자에게 답변을 보냈어요." : "다른 운영진이 먼저 답변했어요. 답변 완료 목록을 확인해 주세요.");
+        } catch {
+          if (S.user?.uid !== uid) return;
+          error.textContent = "답변을 보내지 못했어요. 입력한 답변을 확인하고 다시 시도해 주세요.";
+          error.hidden = false;
+        } finally {
+          if (S.user?.uid === uid) {
+            S.answerSending.delete(id);
+            if (error.isConnected && error.hidden) refresh();
+            button.disabled = false;
+            button.textContent = "답변 보내기";
+          }
+        }
+      };
+    });
   },
   deep() {
     $$("[data-df]").forEach(b => (b.onclick = () => { S.deepF = b.dataset.df; render(); }));
@@ -1085,7 +1267,10 @@ function startStaffData() {
   staffUnsubs.push(B.watchUsers(r => { S.users = r; refresh(); }));
   staffUnsubs.push(B.watchAllAttendance(r => { S.allAtt = r; refresh(); }));
   staffUnsubs.push(B.watchDeepApps(r => { S.deepApps = r; refresh(); }));
-  staffUnsubs.push(B.watchQuestions(r => { S.questions = r; refresh(); }));
+  staffUnsubs.push(B.watchQuestions(
+    r => { S.questions = r; S.staffQuestionsError = false; refresh(); },
+    () => { S.staffQuestionsError = true; refresh(); }
+  ));
   staffUnsubs.push(B.watchStaff(r => { S.staffList = r; refresh(); }));
   restartScores();
 }
@@ -1125,7 +1310,10 @@ function startProfileData() {
       if (before !== null && now > before && S.role === "p") { const l = todayLecture(); celebrate("출석 완료", l ? `${l.n}강 · ${fmtDate(l.date)}` : "출석이 기록됐어요", `${now} / ${LECTURES.length}강`); }
       refresh();
     }));
-    unsubs.push(B.watchMyQuestions(r => { S.myQs = r; refresh(); }));
+    unsubs.push(B.watchMyQuestions(
+      r => { S.myQs = r; S.myQuestionsError = false; refresh(); },
+      () => { S.myQuestionsError = true; refresh(); }
+    ));
   }
 }
 
@@ -1143,7 +1331,7 @@ window.addEventListener("online", offlineBanner); window.addEventListener("offli
   let first = true;
   B.onAuth(async u => {
     stopAll(); stopScanner(); prevAttCount = null;
-    Object.assign(S, { profile: null, staff: false, myAtt: [], notices: [], deepApp: null, myQs: [], users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [], chat: [] });
+    Object.assign(S, { profile: null, staff: false, myAtt: [], notices: [], deepApp: null, myQs: [], users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [], chat: [], myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpSending: false, answerDrafts: {}, answerSending: new Set(), helpFilter: "open", helpLimit: 25 });
     if (u) await onSignedIn(u); else { S.user = null; renderAuth(); }
     if (first) { first = false; setTimeout(() => { const sp = $("#splash"); sp && sp.remove(); }, RM ? 0 : 1500); }
   });
@@ -1156,12 +1344,19 @@ if (!RM) {
   let cur = null;
   const reset = c => { c.classList.remove("tilting"); c.style.removeProperty("--rx"); c.style.removeProperty("--ry"); };
   document.addEventListener("pointermove", e => {
-    if (e.target.closest("input,select,textarea,.flip,#reader")) return;
+    if (e.pointerType !== "mouse" || e.target.closest("button,a,input,select,textarea,.qr-pass,.scan-card,.inquiry-card")) {
+      if (cur) reset(cur);
+      cur = null;
+      return;
+    }
     const c = e.target.closest("main .card, main .stat"); if (cur && cur !== c) reset(cur); cur = c; if (!c) return;
     const r = c.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
     const k = c.classList.contains("stat") ? 10 : Math.max(3, 7 - r.height / 120);
     c.classList.add("tilting"); c.style.setProperty("--ry", ((x - .5) * k * 2).toFixed(2) + "deg"); c.style.setProperty("--rx", ((.5 - y) * k * 2).toFixed(2) + "deg");
     c.style.setProperty("--mx", (x * 100).toFixed(1) + "%"); c.style.setProperty("--my", (y * 100).toFixed(1) + "%");
   });
-  document.addEventListener("pointerup", e => { if (cur && e.pointerType !== "mouse") { reset(cur); cur = null; } });
+  const resetCurrent = () => { if (cur) reset(cur); cur = null; };
+  document.addEventListener("pointercancel", resetCurrent);
+  document.addEventListener("pointerleave", resetCurrent);
+  window.addEventListener("blur", resetCurrent);
 }

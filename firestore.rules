@@ -66,12 +66,26 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
-    // 학습 도우미가 답하지 못한 질문 → 운영진 문의함
+    // 참가자 문의·운영진 답변
     match /questions/{id} {
-      allow create: if signedIn() && request.resource.data.uid == me()
-        && request.resource.data.text is string && request.resource.data.text.size() <= 500;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'text', 'at', 'status'])
+        && request.resource.data.uid == me()
+        && request.resource.data.status == 'open'
+        && request.resource.data.at == request.time
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 500;
       allow read: if isStaff() || (signedIn() && resource.data.uid == me());
-      allow update: if isStaff();
+      allow update: if isStaff()
+        && onlyChanges(['answer', 'status', 'answeredAt', 'answeredBy'])
+        && resource.data.get('answer', '') == ''
+        && request.resource.data.answer is string
+        && request.resource.data.answer.size() > 0
+        && request.resource.data.answer.size() <= 500
+        && request.resource.data.status == 'answered'
+        && request.resource.data.answeredAt == request.time
+        && request.resource.data.get('answeredBy', me()) == me();
       allow delete: if isStaff() || (signedIn() && resource.data.uid == me());
     }
 

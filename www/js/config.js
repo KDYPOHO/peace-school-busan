@@ -17,7 +17,7 @@ export const APP = {
   displayName: "평화 학교",
   name: "부산 청년 평화학교",
   org: "민주평화통일자문회의 부산지역회의",
-  version: "1.3.0",
+  version: "1.3.1",
   year: 2027,
   privacyVersion: "2027-01",          // 개인정보 처리방침 버전 (바꾸면 재동의 안내)
   termsVersion: "2027-01",            // 이용약관 버전

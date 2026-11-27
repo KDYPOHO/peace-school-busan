@@ -2,6 +2,7 @@
   "name": "peace-school-busan",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "부산 청년 평화학교 앱 (웹 + Android + iOS)",
   "scripts": {
     "serve": "npx http-server www -p 8080 -c-1",

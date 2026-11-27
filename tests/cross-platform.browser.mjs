@@ -92,10 +92,32 @@ async function enroll(page) {
 async function reply(page, question, answer) {
   const card = page.locator('.inquiry-card article').filter({ hasText: question });
   const editor = card.locator('textarea');
+  const send = card.locator('button[type="submit"]');
   await editor.waitFor();
   assert.equal(await editor.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 255, 255)');
+
+  const compact = page.viewportSize();
+  const view = page.locator('main[data-view=noti]');
+  assert.equal(await view.evaluate(el => getComputedStyle(el).display), 'flex');
+  const initialScale = await page.evaluate(() => window.visualViewport.scale);
+  await editor.tap();
+  await editor.tap();
   await editor.fill(answer);
-  await card.locator('button[type="submit"]').click();
+  assert.equal(await editor.evaluate(el => el === document.activeElement), true);
+  assert.ok(await editor.evaluate(el => parseFloat(getComputedStyle(el).fontSize) >= 16));
+  assert.equal(await page.evaluate(() => window.visualViewport.scale), initialScale);
+
+  await page.setViewportSize({ width: 1024, height: 768 });
+  assert.equal(await view.evaluate(el => getComputedStyle(el).display), 'grid');
+  const columns = await view.evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length);
+  assert.equal(columns, 2);
+  await page.setViewportSize(compact);
+  assert.equal(await view.evaluate(el => getComputedStyle(el).display), 'flex');
+  assert.equal(await editor.inputValue(), answer);
+  await editor.focus();
+  await page.keyboard.press('Tab');
+  assert.equal(await send.evaluate(el => el === document.activeElement), true);
+  await page.keyboard.press('Enter');
   await card.waitFor({ state: 'hidden' });
 }
 

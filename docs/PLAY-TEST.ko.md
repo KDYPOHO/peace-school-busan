@@ -28,14 +28,15 @@
 | Galaxy Tab S8 실기기 (Android 14·API 34) | 43, 시험 APK | 한국어·가로 방향에서 Test Lab 기본 실행과 자동 탐색 통과. 가상 계정 자동 로그인은 확인되지 않음. [Galaxy Tab S8 결과](https://console.firebase.google.com/project/hanbando-peace-school-qa/testlab/histories/bh.4c2fdb24b53056aa/matrices/7550342388503393454) |
 | Galaxy Tab S8 실기기 (Android 14·API 34) | 45, 시험 APK | 가상 계정으로 로그인해 QR 수강증, 1강 출석과 Apple Silicon Mac에서 저장한 운영진 답변을 확인했다. 태블릿에서 보낸 새 문의가 1건 저장됐다. [교차 기기 답변 결과](https://console.firebase.google.com/project/hanbando-peace-school-qa/testlab/histories/bh.4c2fdb24b53056aa/matrices/5474074139023308158) |
 | 사용자 갤럭시 (Android 16) | 45, 시험 APK | USB 설치에 성공했다. 앱이 처음 열리고 실행 상태를 유지했다. |
-| iPhone SE 3 실기기 (iOS 26.3) | 15, 시험 IPA | 한국어·세로 방향 Test Lab 검사 접수. [iPhone SE 3 진행 상태](https://console.firebase.google.com/project/hanbando-peace-school-qa/testlab/histories/bh.4c2fdb24b53056aa/matrices/8467789990125918884) |
+| iPhone SE 3 실기기 (iOS 26.3) | 15, 시험 IPA | 한국어·세로 방향에서 Test Lab 앱 시작과 자동 탐색을 통과했다. 참가자·운영진 계정 흐름은 별도로 확인한다. [iPhone SE 3 결과](https://console.firebase.google.com/project/hanbando-peace-school-qa/testlab/histories/bh.4c2fdb24b53056aa/matrices/8467789990125918884) |
 | 사용자 iPhone | 빌드 미확인 | 11월 27일 사용자 직접 사용에서 정상 동작을 확인했다. |
+| iPad Pro 12.9형 3세대 실기기 (iPadOS 26.7.3) | 기존 1.3.1(11), 시험 1.3.2(15) | 기존 앱과 개발 서명 시험판 `kr.busan.peaceschool.qa`가 함께 설치됐으며 양쪽 실행에 성공했다. 사용자가 시험판을 직접 열었고 `xcrun devicectl`에서도 실행 성공을 확인했다. 시험판 공통 파일 25개가 Android 빌드 45와 일치했다. |
 
 Android 빌드 45는 `6f439be2c7a3a314e614a5c569d364e51682c35b`에서 만든 시험 APK다. Android 빌드 45와 Mac에서 실행한 Apple 빌드 15의 공통 웹 파일 25개 해시가 일치했다. GitHub에서 같은 커밋으로 두 패키지의 공통 자산과 시험 프로젝트 설정을 대조했고 Android API 24·36, iPhone·iPad 시뮬레이터 검사를 통과했다. [공통 빌드 및 자동 검증](https://github.com/KDYPOHO/peace-school-busan/actions/runs/45956666098)
 
 Pixel 5에서 보낸 문의를 Apple Silicon Mac의 운영진 화면에서 열어 답변했다. 같은 시험 계정으로 Galaxy Tab S8에서 해당 답변을 다시 확인했다.
 
-iPhone SE 3 후보 검사, iPad 실기기 동작, Play Console·TestFlight 내부 채널 설치 확인이 남아 있다. 11월 27일 Test Lab iOS 카탈로그에서 실행 가능한 iPad는 조회되지 않았다. Android AAB는 업로드 서명 전 상태다.
+iPad 시험판의 참가자·운영진 계정 흐름과 Play Console·TestFlight 내부 채널 설치 확인이 남아 있다. Android AAB는 업로드 서명 전 상태다.
 
 ## 업로드 서명
 

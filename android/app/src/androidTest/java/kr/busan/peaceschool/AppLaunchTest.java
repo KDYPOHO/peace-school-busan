@@ -179,7 +179,12 @@ public class AppLaunchTest {
 
     static void assertEventually(ActivityScenario<MainActivity> scenario, String description, String condition)
         throws InterruptedException {
-        long deadline = SystemClock.elapsedRealtime() + 30_000;
+        assertEventually(scenario, description, condition, 30_000);
+    }
+
+    static void assertEventually(ActivityScenario<MainActivity> scenario, String description, String condition, long timeoutMs)
+        throws InterruptedException {
+        long deadline = SystemClock.elapsedRealtime() + timeoutMs;
         do {
             if ("true".equals(evaluate(scenario, "Boolean(" + condition + ")"))) return;
             SystemClock.sleep(250);

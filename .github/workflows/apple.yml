@@ -1,0 +1,87 @@
+name: Apple 후보 빌드 및 Android 공통 파일 검사
+on:
+  push:
+    branches: [codex/android-play-test]
+    paths: [ios/**, .github/workflows/apple.yml]
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+concurrency:
+  group: apple-candidate-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify-apple:
+    runs-on: macos-26
+    timeout-minutes: 25
+    env:
+      PSB_BUILD_MODE: ${{ vars.PSB_STAGING_PROJECT_ID && 'staging' || 'development' }}
+      PSB_STAGING_PROJECT_ID: ${{ vars.PSB_STAGING_PROJECT_ID }}
+      PSB_STAGING_FIREBASE_CONFIG: ${{ vars.PSB_STAGING_FIREBASE_CONFIG }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: 공통 웹 파일 생성
+        run: |
+          npm run build:web
+          npx cap sync ios
+      - name: 통과한 Android 패키지와 공통 웹 파일 대조
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          candidate=
+          runs=$(gh run list --workflow android.yml --branch "$GITHUB_REF_NAME" --status success --limit 12 --json databaseId,headSha --jq '.[] | [.databaseId, .headSha] | @tsv')
+          while IFS=$'\t' read -r run sha; do
+            if [[ -n "$run" ]] && git diff --quiet "$sha" HEAD -- www scripts/bundle-web.mjs scripts/firebase-web-production.json capacitor.config.json package.json package-lock.json; then
+              candidate="$run"
+              break
+            fi
+          done <<< "$runs"
+          test -n "$candidate"
+          gh run download "$candidate" --name peace-school-unsigned-aab --dir "$RUNNER_TEMP/android"
+          python3 scripts/verify_web_assets.py "$RUNNER_TEMP/android/app-release.aab" "$PSB_BUILD_MODE"
+          echo "Android Actions run $candidate" >> "$GITHUB_STEP_SUMMARY"
+      - name: iPhone과 iPad용 공통 아카이브 검사
+        run: |
+          xcodebuild -version
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/PeaceSchool.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO archive -quiet
+          candidate="$RUNNER_TEMP/PeaceSchool.xcarchive/Products/Applications/App.app"
+          python3 scripts/verify_web_assets.py "$candidate/public" "$PSB_BUILD_MODE"
+          python3 - "$candidate/Info.plist" <<'PY'
+          import plistlib
+          import sys
+          with open(sys.argv[1], "rb") as file:
+              info = plistlib.load(file)
+          assert info["CFBundleIdentifier"] == "kr.busan.peaceschool"
+          assert set(info["UIDeviceFamily"]) == {1, 2}
+          assert info["MinimumOSVersion"] == "15.0"
+          print(f'Apple {info["CFBundleShortVersionString"]} ({info["CFBundleVersion"]}) supports iPhone and iPad')
+          PY
+      - name: iPhone과 iPad 시뮬레이터에서 앱 시작
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/simulator" \
+            ARCHS=arm64 CODE_SIGNING_ALLOWED=NO build -quiet
+          candidate="$RUNNER_TEMP/simulator/Build/Products/Debug-iphonesimulator/App.app"
+          python3 scripts/verify_web_assets.py "$candidate/public" "$PSB_BUILD_MODE"
+          for family in iPhone iPad; do
+            device=$(xcrun simctl list devices available -j | node -e '
+              let input = "";
+              process.stdin.on("data", chunk => input += chunk);
+              process.stdin.on("end", () => {
+                const targets = Object.entries(JSON.parse(input).devices).filter(([runtime]) => runtime.includes(".iOS-"));
+                const device = targets.reverse().flatMap(([, devices]) => devices).find(device => device.name.startsWith(process.argv[1]));
+                if (!device) process.exit(1);
+                console.log(device.udid);
+              });' "$family")
+            xcrun simctl boot "$device"
+            xcrun simctl bootstatus "$device" -b
+            xcrun simctl install "$device" "$candidate"
+            xcrun simctl launch "$device" kr.busan.peaceschool
+            xcrun simctl shutdown "$device"
+          done

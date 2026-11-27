@@ -23,7 +23,7 @@ public class AppLaunchTest {
 
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             assertEventually(scenario, "Packaged sign-in screen and logo", """
-                document.title === '평화 학교' && !!document.querySelector('#authForm') &&
+                document.title === '한반도 평화학교' && !!document.querySelector('#authForm') &&
                 (document.querySelector('.auth img.signature')?.naturalWidth || 0) > 0
                 """);
         }

@@ -1,4 +1,4 @@
-// 부산 청년 평화학교 앱 (참가자 + 운영진)
+// 한반도 평화학교 앱 (참가자 + 운영진)
 import { APP, LECTURES, VENUE, PASS_COUNT, ONSITE_CAP, DEEP, TEAMS, CRITERIA, REGIONS, DEEP_APPLY_UNTIL, DEEP_STATUS } from "./config.js";
 import { createBackend, isNative } from "./backend.js";
 import { countedLectures } from "./course.js";
@@ -262,7 +262,7 @@ function renderAuth() {
   const signup = !deletionPage && S.authMode === "signup";
   $("#root").innerHTML = `
   <div class="auth">
-    <div class="logo"><img class="signature" src="img/puac-signature-ko.jpg" alt="민주평화통일자문회의"><b>${esc(APP.displayName)}</b><span>${esc(APP.name)}</span></div>
+    <div class="logo"><img class="signature" src="img/puac-signature-ko.jpg" alt="민주평화통일자문회의"><b>${esc(APP.displayName)}</b><span>${esc(APP.cohortName)}</span></div>
     <section class="card">
       <h2 style="margin:0 0 4px">${deletionPage ? "계정 및 데이터 삭제" : signup ? "회원가입" : "로그인"}</h2>
       <p class="small muted" style="margin:0 0 12px">${deletionPage ? "삭제하려는 계정으로 로그인한 뒤 삭제를 확인해 주세요." : signup ? "이메일과 비밀번호로 계정을 만든 뒤 수강 신청서를 작성해요." : "수강 신청, QR 출석, 수료증을 앱 하나로 관리해요."}</p>
@@ -339,7 +339,7 @@ function accountRemovalSheet() {
 /* ───────── 수강 신청 (3단계) ───────── */
 function renderOnboard() {
   $("#root").innerHTML = `<div class="auth" style="justify-content:flex-start">
-    <div class="logo"><div class="tile"><img src="img/symbol.png" alt=""></div><b>수강 신청</b><span>${esc(APP.year)} ${esc(APP.name)} 기본과정</span></div>
+    <div class="logo"><div class="tile"><img src="img/symbol.png" alt=""></div><b>수강 신청</b><span>${esc(APP.year)} ${esc(APP.cohortName)} 기본과정</span></div>
     <div id="view" style="display:flex;flex-direction:column;gap:14px">${onboardCard()}</div>
     <button class="btn ghost mini" id="obOut" style="align-self:center">다른 계정으로 로그인</button>
     <button class="btn ghost mini" id="obDelete" style="align-self:center">계정 삭제</button>
@@ -795,7 +795,7 @@ function certHtml(p, locked) {
     <div class="no">제 ${APP.year}-부산청년-${esc(String(p.no).replace(/^BS\d+-/, ""))} 호</div>
     <h4>수료증</h4>
     <div class="who">성&emsp;&emsp;명 : ${esc(p.name)}<br>${p.org ? `소&emsp;&emsp;속 : ${esc(p.org)}<br>` : ""}과&emsp;&emsp;정 : 기본과정 (${LECTURES.length}강)</div>
-    <p>위 사람은 ${esc(APP.org)}가 주관한 「${APP.year} ${esc(APP.name)}」 기본과정을 성실히 이수하였기에 이 증서를 수여합니다.</p>
+    <p>위 사람은 ${esc(APP.org)}가 주관한 「${APP.year} ${esc(APP.name)} · ${esc(APP.cohortName)}」 기본과정을 성실히 이수하였기에 이 증서를 수여합니다.</p>
     <div class="date">${end[0]}년 ${end[1]}월 ${end[2]}일</div>
     <div class="issuer"><img src="img/symbol.png" alt="">${esc(APP.org)}</div>
   </div>`;

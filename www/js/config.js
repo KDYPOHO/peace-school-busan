@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// 부산 청년 평화학교 앱 설정
+// 한반도 평화학교 앱 설정
 // Firebase 콘솔 > 프로젝트 설정 > 내 앱(웹)의 firebaseConfig 값을 붙여 넣으세요.
 // apiKey가 비어 있으면 앱은 "체험 모드"(이 기기에만 저장)로 동작합니다.
 // 이 값들은 공개용 식별자이며, 데이터 보호는 firestore.rules가 담당합니다.
@@ -14,8 +14,9 @@ export const firebaseConfig = {
 };
 
 export const APP = {
-  displayName: "평화 학교",
-  name: "부산 청년 평화학교",
+  displayName: "한반도 평화학교",
+  name: "한반도 평화학교",
+  cohortName: "부산 청년 과정",
   org: "민주평화통일자문회의 부산지역회의",
   version: "1.3.1",
   year: 2027,

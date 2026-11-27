@@ -14,6 +14,7 @@ export const firebaseConfig = {
 };
 
 export const APP = {
+  displayName: "평화 학교",
   name: "부산 청년 평화학교",
   org: "민주평화통일자문회의 부산지역회의",
   version: "1.3.0",

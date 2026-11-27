@@ -106,7 +106,7 @@ function shell() {
   <header class="top">
     <div class="top-row">
       <div class="mark"><img src="img/symbol.png" alt="민주평통 심벌"></div>
-      <div class="top-title"><b>${esc(APP.name)}</b><span id="topOrg">${esc(S.profile ? affiliationFull(S.profile) : ORG_ROOT)}</span></div>
+      <div class="top-title"><b>${esc(APP.displayName)}</b><span id="topOrg">${esc(S.profile ? affiliationFull(S.profile) : ORG_ROOT)}</span></div>
       <button class="bell" id="bellBtn" aria-label="공지함">${ic("home").replace(ICON.home, '<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>')}<i id="bellDot" hidden></i></button>
     </div>
     <div class="seg" id="seg" role="group" aria-label="화면 구분" hidden>
@@ -252,7 +252,7 @@ function renderAuth() {
   const signup = S.authMode === "signup";
   $("#root").innerHTML = `
   <div class="auth">
-    <div class="logo"><div class="tile"><img src="img/symbol.png" alt="민주평통 심벌"></div><b>${esc(APP.name)}</b><span>${esc(ORG_ROOT)}</span></div>
+    <div class="logo"><img class="signature" src="img/puac-signature-ko.jpg" alt="민주평화통일자문회의"><b>${esc(APP.displayName)}</b><span>${esc(APP.name)}</span></div>
     <section class="card">
       <h2 style="margin:0 0 4px">${signup ? "회원가입" : "로그인"}</h2>
       <p class="small muted" style="margin:0 0 12px">${signup ? "이메일과 비밀번호로 계정을 만든 뒤 수강 신청서를 작성해요." : "수강 신청, QR 출석, 수료증을 앱 하나로 관리해요."}</p>

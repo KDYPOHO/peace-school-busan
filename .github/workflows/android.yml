@@ -1,16 +1,17 @@
 name: 안드로이드 앱 빌드 (APK)
 on:
   push:
-    branches: [main]
-    paths: ["www/**", "android/**", "capacitor.config.json", "package.json", ".github/workflows/android.yml"]
+    branches: [main, codex/android-play-test]
+    paths: ["www/**", "android/**", "scripts/**", "capacitor.config.json", "package*.json", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["www/**", "android/**", "capacitor.config.json", "package.json", ".github/workflows/android.yml"]
+    paths: ["www/**", "android/**", "scripts/**", "capacitor.config.json", "package*.json", ".github/workflows/android.yml"]
   workflow_dispatch:
 permissions:
   contents: write
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,16 +33,46 @@ jobs:
           G
       - run: npm ci
       - run: npx cap sync android
-      - name: 디버그 APK 빌드 (휴대폰에 바로 설치해 시험용)
+      - name: 디버그 APK 및 서명 전 AAB 빌드
         working-directory: android
-        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+        run: chmod +x gradlew && ./gradlew testDebugUnitTest assembleDebug bundleRelease --no-daemon
+      - name: 패키지 안의 공통 웹 파일 확인
+        run: |
+          python3 scripts/verify_web_assets.py android/app/build/outputs/apk/debug/app-debug.apk
+          python3 scripts/verify_web_assets.py android/app/build/outputs/bundle/release/app-release.aab
       - uses: actions/upload-artifact@v4
         with:
           name: peace-school-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: peace-school-unsigned-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
+      - name: Android 16 에뮬레이터에서 앱 시작 검사
+        if: github.ref != 'refs/heads/main'
+        run: |
+          sudo chmod 666 /dev/kvm
+          sdkmanager 'system-images;android-36;google_apis;x86_64'
+          echo no | avdmanager create avd --force -n peace-school-api36 -k 'system-images;android-36;google_apis;x86_64'
+          emulator -avd peace-school-api36 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > "$RUNNER_TEMP/peace-school-emulator.log" 2>&1 &
+          trap 'adb emu kill || true' EXIT
+          timeout 240 bash -c 'adb wait-for-device; until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 2; done'
+          adb shell input keyevent 82
+          adb shell cmd connectivity airplane-mode enable
+          cd android
+          ./gradlew connectedDebugAndroidTest --no-daemon
+      - uses: actions/upload-artifact@v4
+        if: always() && github.ref != 'refs/heads/main'
+        with:
+          name: android-emulator-evidence
+          path: |
+            ${{ runner.temp }}/peace-school-emulator.log
+            android/app/build/outputs/androidTest-results/connected/
       - name: 누구나 받을 수 있는 시험용 다운로드 링크 갱신 (main에서만)
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

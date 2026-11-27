@@ -1,8 +1,8 @@
 {
   "appId": "kr.busan.peaceschool",
-  "appName": "평화학교",
+  "appName": "평화 학교",
   "webDir": "www",
   "backgroundColor": "#173C74",
-  "android": { "allowMixedContent": false },
+  "android": { "allowMixedContent": false, "adjustMarginsForEdgeToEdge": "auto" },
   "ios": { "contentInset": "never", "scrollEnabled": false }
 }

@@ -12,6 +12,7 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .auth .logo{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
 .auth .logo .tile{width:88px;height:88px;display:grid;place-items:center}
 .auth .logo .tile img{width:88px;height:88px;object-fit:contain}
+.auth .logo .signature{width:min(100%,280px);height:auto;border-radius:8px}
 .auth .logo b{font-family:var(--f-serif);font-size:1.45rem}
 .auth .logo span{font-size:.8rem;color:var(--muted)}
 .err{color:var(--bad);font-size:.82rem;min-height:1.2em;margin:0}

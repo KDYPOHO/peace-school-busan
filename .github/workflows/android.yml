@@ -2,9 +2,9 @@ name: 안드로이드 앱 빌드 (APK)
 on:
   push:
     branches: [main, codex/android-play-test]
-    paths: ["www/**", "android/**", "scripts/**", "capacitor.config.json", "package*.json", ".github/workflows/android.yml"]
+    paths: ["www/**", "android/**", "scripts/**", "tests/**", "capacitor.config.json", "package*.json", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["www/**", "android/**", "scripts/**", "capacitor.config.json", "package*.json", ".github/workflows/android.yml"]
+    paths: ["www/**", "android/**", "scripts/**", "tests/**", "capacitor.config.json", "package*.json", ".github/workflows/android.yml"]
   workflow_dispatch:
 permissions:
   contents: write
@@ -32,6 +32,7 @@ jobs:
           allprojects { p -> swap(p.buildscript.repositories); swap(p.repositories) }
           G
       - run: npm ci
+      - run: node --test tests/*.test.mjs
       - run: npx cap sync android
       - name: 디버그 APK 및 서명 전 AAB 빌드
         working-directory: android
@@ -55,8 +56,11 @@ jobs:
         if: github.ref != 'refs/heads/main'
         run: |
           sudo chmod 666 /dev/kvm
-          sdkmanager 'system-images;android-36;google_apis;x86_64'
-          echo no | avdmanager create avd --force -n peace-school-api36 -k 'system-images;android-36;google_apis;x86_64'
+          sdkmanager_bin=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)
+          test -n "$sdkmanager_bin"
+          "$sdkmanager_bin" --sdk_root="$ANDROID_HOME" 'emulator' 'system-images;android-36;google_apis;x86_64'
+          echo no | "$(dirname "$sdkmanager_bin")/avdmanager" create avd --force -n peace-school-api36 -k 'system-images;android-36;google_apis;x86_64'
+          export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
           emulator -avd peace-school-api36 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > "$RUNNER_TEMP/peace-school-emulator.log" 2>&1 &
           trap 'adb emu kill || true' EXIT
           timeout 240 bash -c 'adb wait-for-device; until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 2; done'

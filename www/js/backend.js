@@ -1,5 +1,6 @@
 // 데이터 계층: Firebase(실서비스) 또는 Demo(이 기기에만 저장) 중 하나를 같은 모양으로 제공
 import { firebaseConfig } from "./config.js";
+import { deleteAccountInOrder } from "./account-deletion.js";
 
 const FB = "https://www.gstatic.com/firebasejs/10.12.2/";
 export const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
@@ -56,15 +57,36 @@ async function firebaseBackend() {
     async signUpEmail(email, pw) { await A.createUserWithEmailAndPassword(auth, email, pw); },
     async resetPassword(email) { await A.sendPasswordResetEmail(auth, email); },
     async signOut() { await A.signOut(auth); },
-    async deleteAccount() {
-      const uid = api.user.uid;
-      // 개인정보 보호법 제21조: 탈퇴 시 본인 정보 지체 없이 파기
-      for (const c of ["attendance", "questions"]) {
-        try { const snap = await getDocs(query(collection(db, c), where("uid", "==", uid))); await Promise.all(snap.docs.map(d => deleteDoc(d.ref))); } catch (e) { console.warn(c, e); }
-      }
-      try { await deleteDoc(doc(db, "deepApps", uid)); } catch (e) {}
-      await deleteDoc(doc(db, "users", uid));
-      await A.deleteUser(auth.currentUser);
+    accountDeletionMethod() {
+      return auth.currentUser?.providerData.some(p => p.providerId === 'password') ? 'password' : 'google';
+    },
+    async deleteAccount(password) {
+      const user = auth.currentUser;
+      if (!user) throw Object.assign(new Error('Sign in again'), { code: 'auth/requires-recent-login' });
+      const uid = user.uid;
+      const method = api.accountDeletionMethod();
+      await deleteAccountInOrder({
+        async reauthenticate() {
+          if (method === 'password') {
+            await A.reauthenticateWithCredential(user, A.EmailAuthProvider.credential(user.email, password));
+          } else {
+            await A.reauthenticateWithPopup(user, new A.GoogleAuthProvider());
+          }
+        },
+        async deleteRecords() {
+          const snapshots = await Promise.all(['attendance', 'questions'].map(name =>
+            F.getDocsFromServer(query(collection(db, name), where('uid', '==', uid)))
+          ));
+          const refs = snapshots.flatMap(snap => snap.docs.map(record => record.ref));
+          refs.push(doc(db, 'deepApps', uid), doc(db, 'users', uid));
+          for (let offset = 0; offset < refs.length; offset += 400) {
+            const batch = F.writeBatch(db);
+            for (const ref of refs.slice(offset, offset + 400)) batch.delete(ref);
+            await batch.commit();
+          }
+        },
+        deleteLogin: () => A.deleteUser(user)
+      });
     },
 
     async isStaff() {
@@ -152,6 +174,7 @@ function demoBackend() {
     async signUpEmail(email, pw) { return api.signInEmail(email, pw); },
     async resetPassword() {},
     async signOut() { D.me = null; api.user = null; save(); authCb && authCb(null); },
+    accountDeletionMethod() { return 'demo'; },
     async deleteAccount() { for (const k of Object.keys(D.attendance)) if (D.attendance[k].uid === D.me.uid) delete D.attendance[k]; D.questions = D.questions.filter(q => q.uid !== D.me.uid); delete D.users[D.me.uid]; delete D.deepApps[D.me.uid]; return api.signOut(); },
     async isStaff() { return !!D.staff[api.user.uid]; },
     async getProfile() { return D.users[api.user.uid] || null; },

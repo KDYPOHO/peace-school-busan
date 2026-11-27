@@ -14,6 +14,7 @@ import { privacyHtml, termsHtml, permissionsHtml, consentTable, CONSENT_REQUIRED
 /* ───────── 공통 도구 ───────── */
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
+const deletionPage = !isNative && new URLSearchParams(location.search).get('account') === 'delete';
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const LS = {
@@ -249,13 +250,13 @@ const authMsg = e => AUTH_ERR[e && e.code] || "문제가 생겼어요. 잠시 �
 
 function renderAuth() {
   stopScanner();
-  const signup = S.authMode === "signup";
+  const signup = !deletionPage && S.authMode === "signup";
   $("#root").innerHTML = `
   <div class="auth">
     <div class="logo"><img class="signature" src="img/puac-signature-ko.jpg" alt="민주평화통일자문회의"><b>${esc(APP.displayName)}</b><span>${esc(APP.name)}</span></div>
     <section class="card">
-      <h2 style="margin:0 0 4px">${signup ? "회원가입" : "로그인"}</h2>
-      <p class="small muted" style="margin:0 0 12px">${signup ? "이메일과 비밀번호로 계정을 만든 뒤 수강 신청서를 작성해요." : "수강 신청, QR 출석, 수료증을 앱 하나로 관리해요."}</p>
+      <h2 style="margin:0 0 4px">${deletionPage ? "계정 및 데이터 삭제" : signup ? "회원가입" : "로그인"}</h2>
+      <p class="small muted" style="margin:0 0 12px">${deletionPage ? "삭제하려는 계정으로 로그인한 뒤 삭제를 확인해 주세요." : signup ? "이메일과 비밀번호로 계정을 만든 뒤 수강 신청서를 작성해요." : "수강 신청, QR 출석, 수료증을 앱 하나로 관리해요."}</p>
       <form class="form" id="authForm" novalidate>
         <label class="f">이메일<input type="email" id="aEmail" autocomplete="email" inputmode="email" required></label>
         <label class="f">비밀번호${signup ? " (6자 이상)" : ""}<input type="password" id="aPw" autocomplete="${signup ? "new-password" : "current-password"}" minlength="6" required></label>
@@ -265,15 +266,16 @@ function renderAuth() {
       </form>
       ${B.canGoogle ? '<button class="btn ghost block" style="margin-top:10px" id="gBtn">Google 계정으로 계속하기</button>' : ""}
       <div class="row between small" style="margin-top:12px">
-        <button class="btn ghost mini" id="swBtn">${signup ? "이미 계정이 있어요" : "처음이에요 · 회원가입"}</button>
+        ${deletionPage ? '<a class="btn ghost mini" href="./">앱으로 돌아가기</a>' : `<button class="btn ghost mini" id="swBtn">${signup ? "이미 계정이 있어요" : "처음이에요 · 회원가입"}</button>`}
         ${signup ? "" : '<button class="btn ghost mini" id="rsBtn">비밀번호 찾기</button>'}
       </div>
     </section>
-    ${B.mode === "demo" ? '<p class="note">체험 모드: 이 기기에만 저장돼요. 아무 이메일로나 들어가 볼 수 있어요.</p>' : ""}
+    ${B.mode === "demo" ? `<p class="note">${deletionPage ? "서버에 연결할 수 없어요. 연결을 확인한 뒤 페이지를 다시 열어 주세요." : "체험 모드: 이 기기에만 저장돼요. 아무 이메일로나 들어가 볼 수 있어요."}</p>` : ""}
     <p class="note"><button class="btn ghost mini" id="pvBtn"><b>개인정보 처리방침</b></button> <button class="btn ghost mini" id="tmBtn">이용약관</button> <button class="btn ghost mini" id="pmBtn">앱 접근권한</button></p>
   </div>`;
   const err = m => ($("#aErr").textContent = m || "");
-  $("#swBtn").onclick = () => { S.authMode = signup ? "login" : "signup"; renderAuth(); };
+  if (!deletionPage) $("#swBtn").onclick = () => { S.authMode = signup ? "login" : "signup"; renderAuth(); };
+  if (deletionPage && B.mode === 'demo') $("#aBtn").disabled = true;
   $("#pvBtn").onclick = privacySheet; $("#tmBtn").onclick = termsSheet; $("#pmBtn").onclick = permSheet;
   const rs = $("#rsBtn");
   rs && (rs.onclick = async () => {
@@ -285,6 +287,7 @@ function renderAuth() {
   g && (g.onclick = async () => { err(); try { await B.signInGoogle(); } catch (e) { err(authMsg(e)); } });
   $("#authForm").onsubmit = async e => {
     e.preventDefault(); err();
+    if (deletionPage && B.mode === 'demo') return err('서버 연결이 필요해요.');
     const em = $("#aEmail").value.trim(), pw = $("#aPw").value;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) return err("이메일 형식을 확인해 주세요.");
     if (pw.length < 6) return err("비밀번호는 6자 이상이에요.");
@@ -300,14 +303,40 @@ function privacySheet() { legalSheet(privacyHtml()); }
 function termsSheet() { legalSheet(termsHtml()); }
 function permSheet() { legalSheet(`<h1>앱 접근권한 안내</h1>${permissionsHtml()}`); }
 
+function accountRemovalSheet() {
+  const method = B.accountDeletionMethod();
+  if (isNative && method === 'google') {
+    sheet(`<h2>계정 및 데이터 삭제</h2><p>Google 계정으로 가입하셨다면 웹에서 본인 확인을 마쳐 주세요.</p><a class="btn block" href="${esc(APP.accountDeletionUrl)}" target="_blank" rel="noopener">웹에서 계정 삭제</a>`);
+    return;
+  }
+  const verify = method === 'password' ? '<label class="f">현재 비밀번호<input id="deletePassword" type="password" autocomplete="current-password" required></label>' : '';
+  sheet(`<h2>계정 및 데이터 삭제</h2><p>로그인 계정과 수강 신청, 출결, 문의, 심화과정 지원 기록을 삭제합니다. 삭제한 기록은 되돌릴 수 없습니다.</p><form class="form" id="deleteAccountForm">${verify}<p class="err" id="deleteError" role="alert"></p><button class="btn danger block" id="confirmDeletion" type="submit">${method === 'google' ? 'Google 본인 확인 후 삭제' : '계정 삭제'}</button></form>`);
+  $('#deleteAccountForm').onsubmit = async event => {
+    event.preventDefault();
+    const button = $('#confirmDeletion');
+    button.disabled = true;
+    try {
+      await B.deleteAccount($('#deletePassword')?.value);
+      closeSheet();
+      toast('계정과 해당 기록을 삭제했어요.');
+    } catch (error) {
+      const message = $('#deleteError');
+      if (message) message.textContent = AUTH_ERR[error.code] || '삭제 완료를 확인하지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.';
+      button.disabled = false;
+    }
+  };
+}
+
 /* ───────── 수강 신청 (3단계) ───────── */
 function renderOnboard() {
   $("#root").innerHTML = `<div class="auth" style="justify-content:flex-start">
     <div class="logo"><div class="tile"><img src="img/symbol.png" alt=""></div><b>수강 신청</b><span>${esc(APP.year)} ${esc(APP.name)} 기본과정</span></div>
     <div id="view" style="display:flex;flex-direction:column;gap:14px">${onboardCard()}</div>
     <button class="btn ghost mini" id="obOut" style="align-self:center">다른 계정으로 로그인</button>
+    <button class="btn ghost mini" id="obDelete" style="align-self:center">계정 삭제</button>
   </div>`;
   $("#obOut").onclick = () => B.signOut();
+  $("#obDelete").onclick = accountRemovalSheet;
   bindOnboard();
 }
 function onboardCard() {
@@ -977,11 +1006,7 @@ const BIND = {
     $("#cpUid").onclick = () => copyText(S.user.uid, "계정 ID를 복사했어요");
     $("#pvBtn2").onclick = privacySheet; $("#tmBtn2").onclick = termsSheet; $("#pmBtn2").onclick = permSheet; $("#dlBtn").onclick = myDataExport;
     $("#outBtn").onclick = async () => { if (await confirmSheet("로그아웃할까요?", "다시 들어오려면 이메일과 비밀번호가 필요해요.", "로그아웃")) B.signOut(); };
-    $("#delBtn").onclick = async () => {
-      if (!(await confirmSheet("회원 탈퇴할까요?", "계정, 수강 신청서, 출결 기록, 문의, 심화 지원서가 즉시 지워지고 되돌릴 수 없어요. 수료 요건과 수료증도 함께 사라져요.", "탈퇴하기", true))) return;
-      try { await B.deleteAccount(); toast("탈퇴했어요. 그동안 고마웠어요."); }
-      catch (e) { toast(authMsg(e), 4000); }
-    };
+    $("#delBtn").onclick = accountRemovalSheet;
   },
   dash() {
     const st = stats();
@@ -1065,6 +1090,13 @@ function startStaffData() {
 let prevAttCount = null;
 async function onSignedIn(u) {
   S.user = u;
+  if (deletionPage && B.mode !== 'demo') {
+    $('#root').innerHTML = `<div class="auth"><section class="card"><h2>계정 및 데이터 삭제</h2><p>${esc(u.email)} 계정으로 로그인했습니다.</p><button class="btn danger block" id="webDelete">삭제 계속하기</button><button class="btn ghost block" id="webOut">다른 계정으로 로그인</button><a href="./">앱으로 돌아가기</a></section></div>`;
+    $('#webDelete').onclick = accountRemovalSheet;
+    $('#webOut').onclick = () => B.signOut();
+    return;
+  }
+  if (deletionPage) return renderAuth();
   $("#root").innerHTML = '<div class="auth"><p class="note" style="text-align:center">불러오는 중…</p></div>';
   try {
     [S.profile, S.staff] = await Promise.all([B.getProfile(), B.isStaff()]);

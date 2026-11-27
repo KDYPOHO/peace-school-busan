@@ -26,6 +26,7 @@ export const APP = {
   // 시험용 앱 설치 링크 (안드로이드 APK는 main에 올릴 때마다 자동 갱신)
   androidApk: "https://github.com/KDYPOHO/peace-school-busan/releases/download/test-latest/peace-school.apk",
   testGuide: "https://github.com/KDYPOHO/peace-school-busan/blob/main/docs/TESTING.md",
+  accountDeletionUrl: "https://kdypoho.github.io/peace-school-busan/?account=delete",
   contact: "민주평통 부산지역회의 사무처"
 };
 

@@ -62,6 +62,15 @@ jobs:
           assert info["MinimumOSVersion"] == "15.0"
           print(f'Apple {info["CFBundleShortVersionString"]} ({info["CFBundleVersion"]}) supports iPhone and iPad')
           PY
+      - name: Apple 실기기 검증용 아카이브 보관
+        run: |
+          ditto -c -k --keepParent "$RUNNER_TEMP/PeaceSchool.xcarchive" "$RUNNER_TEMP/PeaceSchool.xcarchive.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: peace-school-unsigned-apple-archive
+          path: ${{ runner.temp }}/PeaceSchool.xcarchive.zip
+          if-no-files-found: error
+          retention-days: 14
       - name: iPhone과 iPad 시뮬레이터에서 앱 시작
         run: |
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \

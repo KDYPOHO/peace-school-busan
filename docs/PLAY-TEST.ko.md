@@ -48,6 +48,8 @@ iPad 시험판의 참가자·운영진 계정 흐름과 Play Console·TestFlight
 
 Android 46과 iPad 시험판 16의 공통 웹 파일 25개를 대조했다. iPad에 시험판 16을 설치했다. 대기 화면과 승인 후 과정 화면을 확인하는 iPad XCTest를 빌드했으며, 기기 잠금 때문에 실행을 보류했다. 양쪽 내부 채널 배포는 진행 전이다.
 
+2026년 11월 27일 시험 프로젝트의 Firebase Test Lab iOS 기기 목록에는 iPhone만 있었다. iPad 10세대는 11월 23일 목록에서 제거됐다. iPad 실기기 검증은 기존에 준비한 기기에서 진행해야 한다. [Firebase Test Lab 기기 목록](https://firebase.google.com/docs/test-lab/ios/available-testing-devices#deprecated-devices-and-versions)
+
 iPad(A16) 시뮬레이터(iPadOS 26.5)에서 Apple 시험 빌드 16으로 가입 승인 XCTest 1건을 통과했다. 승인 대기 중에는 과정 메뉴를 열 수 없었고, 시험 운영진이 승인하자 같은 로그인 상태에서 출석 메뉴와 수강번호 복사 버튼이 표시됐다. 시험 Firebase에서 승인 시각과 운영진 기록을 확인했다. 시뮬레이터 앱과 서명된 시험 IPA의 공통 파일 27개가 일치했다.
 
 같은 iPad 시뮬레이터에서 이메일 신규 가입과 3단계 수강 신청을 앱을 통해 별도로 완료했다. 새 계정은 과정 메뉴 없이 신청서로 이동했고, 제출 직후 가입 승인 대기 화면에 들어갔다. 시험 Firestore에 새 기록이 대기 상태로 저장됐고, 이 계정으로 일정과 공지를 읽는 두 요청은 권한 오류(403)로 차단됐다. 검사에는 시험 IPA와 공통 파일 27개가 일치하는 임시 시험 앱을 사용했다.

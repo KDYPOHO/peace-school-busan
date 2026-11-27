@@ -36,7 +36,7 @@ Android 빌드 45는 `6f439be2c7a3a314e614a5c569d364e51682c35b`에서 만든 시
 
 Pixel 5에서 보낸 문의를 Apple Silicon Mac의 운영진 화면에서 열어 답변했다. 같은 시험 계정으로 Galaxy Tab S8에서 해당 답변을 다시 확인했다.
 
-iPad 시험판의 참가자·운영진 계정 흐름과 Play Console·TestFlight 내부 채널 설치 확인이 남아 있다. Android AAB는 업로드 서명 전 상태다.
+iPad 시험판의 참가자·운영진 계정 흐름과 Play Console·TestFlight 내부 채널 설치 확인이 남아 있다.
 
 ## 신규 가입 승인
 
@@ -46,7 +46,18 @@ iPad 시험판의 참가자·운영진 계정 흐름과 Play Console·TestFlight
 
 승인 기능 커밋은 `01070f7518e9f831a2e1cfe38f9ac68be6ca68f5`다. 시험 Firebase에 이 커밋의 Firestore 규칙을 적용했다. 시험 계정으로 승인 전 접근·직접 승인·중복 승인 차단과 운영진 승인 후 접근을 확인했다. Chromium과 WebKit에서도 양쪽 대기 화면이 운영진 승인 한 번으로 전환됐다. [후보 빌드와 검증](https://github.com/KDYPOHO/peace-school-busan/actions/runs/45960878587)
 
-Android 46과 iPad 시험판 16의 공통 웹 파일 25개를 대조했다. iPad에 시험판 16을 설치했으며 이번 빌드의 화면·계정 실기기 검증과 양쪽 내부 채널 배포는 진행 전이다.
+Android 46과 iPad 시험판 16의 공통 웹 파일 25개를 대조했다. iPad에 시험판 16을 설치했다. 대기 화면과 승인 후 과정 화면을 확인하는 iPad XCTest를 빌드했으며, 기기 잠금 때문에 실행을 보류했다. 양쪽 내부 채널 배포는 진행 전이다.
+
+## 가입 승인 후보 서명 결과
+
+1.3.2 Android 46은 Play Console에 등록된 기존 업로드 인증서로 서명했다. `jarsigner`와 `bundletool validate` 검사를 통과했으며 패키지 `kr.busan.peaceschool`, 최소 API 24, 대상 API 36을 확인했다. Apple 16은 Xcode에서 App Store Connect용 IPA로 내보냈고, 배포 서명과 iPhone·iPad 지원을 확인했다. 두 서명 패키지에서 시험 Firebase 설정을 포함한 공통 웹 파일 25개의 SHA-256이 일치했다. [후보 소스 및 자동 검증](https://github.com/KDYPOHO/peace-school-busan/actions/runs/45960878587)
+
+| 서명 파일 | SHA-256 |
+|---|---|
+| 한반도-평화학교-Play-내부시험-46.aab | `743253029db3171e5f90ac1d63d947ee86e128d0f8ab90446bdc4a6bebe3e358` |
+| 한반도-평화학교-TestFlight-내부시험-16.ipa | `726e5e297ba71ad8931213bd1d2bc34433421f75a4361ee06914ecab286cbc72` |
+
+Play Console 내부 테스트의 현재 빌드는 1.3.1(29)이며 TestFlight 내부 그룹은 1.3.1(11)을 테스트 중이다. 이 TestFlight 그룹은 Xcode 빌드를 자동 배포하도록 설정되어 있어 승인 실기기 검증이 끝날 때까지 최신 후보 업로드를 보류한다.
 
 ## 업로드 서명
 

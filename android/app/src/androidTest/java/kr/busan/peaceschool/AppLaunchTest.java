@@ -166,7 +166,7 @@ public class AppLaunchTest {
 
     private void switchAccount(ActivityScenario<MainActivity> scenario, String role)
         throws InterruptedException {
-        evaluate(scenario, """
+        evaluate(scenario, String.format("""
             (() => {
               const data = JSON.parse(localStorage.getItem('psb_demo_v1'));
               data.me = JSON.parse(sessionStorage.getItem('qaAccounts')).%s;
@@ -174,7 +174,7 @@ public class AppLaunchTest {
               localStorage.removeItem('psb_role');
               location.reload();
             })()
-            """.formatted(role));
+            """, role));
     }
 
     private void assertEventually(ActivityScenario<MainActivity> scenario, String description, String condition)

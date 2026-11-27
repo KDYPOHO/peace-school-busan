@@ -52,7 +52,7 @@ android/  ios/       Capacitor로 만든 네이티브 앱 프로젝트
 - 시험 빌드는 `PSB_BUILD_MODE=staging`과 두 변수 `PSB_STAGING_PROJECT_ID`, `PSB_STAGING_FIREBASE_CONFIG`의 일치하는 별도 프로젝트 설정이 필요합니다. `kdypoho`를 시험 대상으로 지정하면 빌드가 실패합니다.
 - 로컬 개발은 `npm ci`, `PSB_BUILD_MODE=development npm run build:web` 순서로 실행합니다. 에뮬레이터는 `npx firebase emulators:start --project demo-hanbando-school --only auth,firestore`, 시험 일정은 `node scripts/staging-schedule.mjs --emulator`로 준비합니다. 웹에서 `?emulator=localhost`로 열거나 데이터가 기기에만 저장되는 체험은 `?demo=1`로 선택합니다.
 - 두 플랫폼 패키지는 같은 빌드 모드에서 생성된 `www/`를 사용합니다. 준비한 Firebase 모드는 배포 전 `python3 scripts/verify_web_assets.py <패키지 또는 public 폴더> <모드>`로 검증합니다. 자동 검증은 `npm test`와 `npm run test:firebase`를 실행합니다.
-- 운영 규칙 적용 전 활성 규칙을 보관하고, 전체 공지를 조회하는 이전 앱과 좌석 기록 없는 기존 심화 선발 상태의 호환성을 확인합니다. 기존 선발자는 기록을 보존하며 좌석을 배정합니다. 정원 또는 데이터 불일치가 있으면 운영진 확인을 먼저 받습니다. 시험 마감 6월 20일은 시험 일정에만 사용합니다.
+- 운영 규칙 적용 전 활성 규칙을 보관하고 `notices`에 심화 공지가 있는지 확인합니다. 이 경로는 이전 앱도 읽는 전체 공지용입니다. 심화 공지는 선발자와 운영진만 읽을 수 있는 `deepNotices`를 사용합니다. 기존 심화 공지가 있으면 원문을 보존해 새 경로로 옮긴 뒤 전체 공지 경로에서 제거합니다. 좌석 기록 없는 기존 심화 선발 상태의 호환성도 확인합니다. 기존 선발자는 기록을 보존하며 좌석을 배정합니다. 정원 또는 데이터 불일치가 있으면 운영진 확인을 먼저 받습니다. 시험 마감 6월 20일은 시험 일정에만 사용합니다.
 
 ## 휴대폰에서 시험하기
 

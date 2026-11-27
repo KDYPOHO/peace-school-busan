@@ -237,7 +237,7 @@ const archiveCard = () => `<section class="card"><a class="arch" href="${APP.arc
 function visibleNotices() {
   return S.notices;
 }
-const noticeItem = n => ({ key: "n_" + n.id, id: n.id, title: n.title, body: n.body, at: n.at, type: "공지" });
+const noticeItem = n => ({ key: (n.audience === "deep" ? "d_" : "n_") + n.id, id: n.id, title: n.title, body: n.body, at: n.at, type: "공지" });
 const replyItem = q => ({ key: "q_" + q.id, id: q.id, title: q.text, at: q.answeredAt, type: "문의 답변" });
 function inboxItems() {
   return [...visibleNotices().map(noticeItem), ...S.myQs.filter(q => q.answer).map(replyItem)]
@@ -746,7 +746,7 @@ const VIEWS = {
     </section>
     <section class="card">
       <h2>올린 공지</h2>
-      <div class="list small">${S.notices.map(n => `<div class="li"><div class="body"><div class="k">${esc(n.title)}</div><div class="muted">${fmtTime(n.at)} · ${n.audience === "deep" ? "심화 선발자" : "전체"}</div></div><button class="btn ghost mini" data-delnoti="${esc(n.id)}">삭제</button></div>`).join("") || '<p class="muted">아직 올린 공지가 없어요.</p>'}</div>
+      <div class="list small">${S.notices.map(n => `<div class="li"><div class="body"><div class="k">${esc(n.title)}</div><div class="muted">${fmtTime(n.at)} · ${n.audience === "deep" ? "심화 선발자" : "전체"}</div></div><button class="btn ghost mini" data-delnoti="${esc(n.id)}" data-audience="${n.audience === "deep" ? "deep" : "all"}">삭제</button></div>`).join("") || '<p class="muted">아직 올린 공지가 없어요.</p>'}</div>
     </section>`;
   },
   deep() {
@@ -1291,7 +1291,7 @@ const BIND = {
       try { await B.addNotice({ title, body, audience: $("#nAud").value }); S.notiDraft = null; $("#nTitle").value = ""; $("#nBody").value = ""; toast("공지를 올렸어요"); }
       catch (e2) { toast("올리지 못했어요"); }
     };
-    $$("[data-delnoti]").forEach(b => (b.onclick = async () => { if (!(await confirmSheet("공지를 지울까요?", "참가자 앱에서도 바로 사라져요.", "삭제", true))) return; try { await B.deleteNotice(b.dataset.delnoti); toast("지웠어요"); } catch (e) { toast("지우지 못했어요"); } }));
+    $$("[data-delnoti]").forEach(b => (b.onclick = async () => { if (!(await confirmSheet("공지를 지울까요?", "참가자 앱에서도 바로 사라져요.", "삭제", true))) return; try { await B.deleteNotice(b.dataset.delnoti, b.dataset.audience); toast("지웠어요"); } catch (e) { toast("지우지 못했어요"); } }));
     $$("[data-help-filter]").forEach(button => {
       button.onclick = () => { S.helpFilter = button.dataset.helpFilter; S.helpLimit = 25; render(); };
     });

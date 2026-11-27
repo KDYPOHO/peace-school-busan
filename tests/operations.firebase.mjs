@@ -106,20 +106,28 @@ test('문의 재전송은 같은 문서를 사용하고 답변 동시 저장은 
   assert.equal((await getDoc(inquiry)).data().answer, winner);
 });
 
-test('공지는 대상에 맞게 조회하고 동일 계정만 읽음 기록을 공유한다', async () => {
+test('이전 앱은 전체 공지를 조회하고 심화 공지는 선발자와 운영진만 읽는다', async () => {
   await fixture(async admin => {
-    await setDoc(doc(admin, 'notices', 'public'), { audience: 'all' });
-    await setDoc(doc(admin, 'notices', 'private'), { audience: 'deep' });
+    await setDoc(doc(admin, 'notices', 'legacy'), { title: '가상 기존 공지' });
     await setDoc(doc(admin, 'deepApps', 'alice'), { uid: 'alice', status: 'selected', seat: 1 });
   });
-  const alice = db('alice'), bob = db('bob');
-  const publicOnly = query(collection(bob, 'notices'), where('audience', '==', 'all'));
-  const candidates = store => query(collection(store, 'notices'), where('audience', '==', 'deep'));
-  assert.equal((await assertSucceeds(getDocs(publicOnly))).size, 1);
-  assert.equal((await assertSucceeds(getDocs(candidates(alice)))).size, 1);
-  await assertFails(getDocs(candidates(bob)));
-  await assertFails(getDocs(collection(bob, 'notices')));
-  const marker = store => doc(store, 'users', 'alice', 'inboxReads', 'n_private');
+  const alice = db('alice'), bob = db('bob'), staff = db('operator-one');
+  await assertSucceeds(setDoc(doc(staff, 'notices', 'public'), { audience: 'all' }));
+  await assertSucceeds(setDoc(doc(staff, 'deepNotices', 'private'), { audience: 'deep' }));
+  await assertFails(setDoc(doc(staff, 'notices', 'misrouted-private'), { audience: 'deep' }));
+  await assertFails(setDoc(doc(staff, 'deepNotices', 'misrouted-public'), { audience: 'all' }));
+  await assertFails(setDoc(doc(bob, 'notices', 'public'), { audience: 'all' }));
+  const guest = env.unauthenticatedContext().firestore();
+  await assertFails(getDocs(collection(guest, 'notices')));
+  await assertFails(getDocs(collection(guest, 'deepNotices')));
+  const publicNotices = collection(bob, 'notices');
+  assert.deepEqual((await assertSucceeds(getDocs(publicNotices))).docs.map(item => item.id).sort(), ['legacy', 'public']);
+  const privateNotices = store => collection(store, 'deepNotices');
+  assert.equal((await assertSucceeds(getDocs(privateNotices(alice)))).size, 1);
+  assert.equal((await assertSucceeds(getDocs(privateNotices(staff)))).size, 1);
+  await assertFails(getDocs(privateNotices(bob)));
+  await assertFails(getDoc(doc(bob, 'deepNotices', 'private')));
+  const marker = store => doc(store, 'users', 'alice', 'inboxReads', 'd_private');
   await assertSucceeds(setDoc(marker(alice), { at: serverTimestamp() }));
   assert.equal((await assertSucceeds(getDoc(marker(db('alice'))))).exists(), true);
   await assertFails(getDoc(marker(bob)));

@@ -127,12 +127,16 @@ service cloud.firestore {
     function selected() {
       return exists(deepPath(me())) && get(deepPath(me())).data.status == 'selected';
     }
-    function noticeVisible(audience) {
-      return audience == 'all' || audience == 'deep' && selected();
-    }
+    // Older apps list the whole public collection. Private notices use their own access rule.
     match /notices/{id} {
-      allow read: if isStaff() || signedIn() && noticeVisible(resource.data.audience);
-      allow create, update: if isStaff() && request.resource.data.audience in ['all', 'deep'];
+      allow read: if signedIn();
+      allow create, update: if isStaff() && request.resource.data.audience == 'all';
+      allow delete: if isStaff();
+    }
+
+    match /deepNotices/{id} {
+      allow read: if isStaff() || signedIn() && selected();
+      allow create, update: if isStaff() && request.resource.data.audience == 'deep';
       allow delete: if isStaff();
     }
 

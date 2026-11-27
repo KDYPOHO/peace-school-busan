@@ -53,6 +53,7 @@ async function firebaseBackend(settings, emulator) {
   };
   const readRef = (uid, key) => doc(db, "users", uid, "inboxReads", key);
   const seatRef = seat => doc(db, "deepSeats", String(seat));
+  const noticeCollection = audience => audience === "deep" ? "deepNotices" : "notices";
 
   const api = {
     mode: "firebase",
@@ -184,17 +185,30 @@ async function firebaseBackend(settings, emulator) {
     },
 
     watchNotices({ staff, selected }, cb, onError) {
-      const ref = collection(db, "notices");
-      const sources = staff ? [ref] : ['all', ...(selected ? ['deep'] : [])].map(audience => query(ref, where("audience", "==", audience)));
-      const items = sources.map(() => []);
-      const unsubs = sources.map((source, index) => onSnapshot(source, snapshot => {
-        items[index] = rows(snapshot).map(row => ({ ...row, at: toMs(row.at) }));
-        cb([].concat(...items).sort((a, b) => b.at - a.at));
-      }, error => { items[index] = []; cb([].concat(...items)); onError?.(error); }));
+      const audiences = staff || selected ? ["all", "deep"] : ["all"];
+      const items = audiences.map(() => []);
+      const publish = () => cb([].concat(...items).sort((a, b) => b.at - a.at));
+      const unsubs = audiences.map((audience, index) => {
+        const source = collection(db, noticeCollection(audience));
+        return onSnapshot(source, snapshot => {
+          items[index] = rows(snapshot).map(row => ({ ...row, audience, at: toMs(row.at) }));
+          publish();
+        }, error => {
+          items[index] = [];
+          publish();
+          onError?.(error);
+        });
+      });
       return () => unsubs.forEach(unsub => unsub());
     },
-    async addNotice(n) { ensureOnline(); await F.addDoc(collection(db, "notices"), { ...n, at: ts(), by: api.user.uid }); },
-    async deleteNotice(id) { ensureOnline(); await deleteDoc(doc(db, "notices", id)); },
+    async addNotice(notice) {
+      ensureOnline();
+      await F.addDoc(collection(db, noticeCollection(notice.audience)), { ...notice, at: ts(), by: api.user.uid });
+    },
+    async deleteNotice(id, audience) {
+      ensureOnline();
+      await deleteDoc(doc(db, noticeCollection(audience), id));
+    },
 
     async askQuestion(text, requestId) {
       ensureOnline();

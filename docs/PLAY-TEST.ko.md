@@ -14,6 +14,21 @@
 - Android 휴대폰과 태블릿은 같은 AAB를 사용한다. 태블릿 세로·가로에서 카메라가 한 화면만 보이는지 확인한다.
 - Apple Silicon Mac에서 iPad 앱으로 테스트할 때는 TestFlight 그룹의 Mac 테스트 조건을 확인한다. Mac 카메라 접근과 수강번호 대체 입력은 별도로 시험한다. Intel Mac에서는 웹을 사용할 수 있다. [Apple Silicon Mac 앱 가용성](https://developer.apple.com/help/app-store-connect/manage-your-apps-availability/manage-availability-of-iphone-and-ipad-apps-on-macs-with-apple-silicon/)
 
+## 1.3.2 검증 기록
+
+2026년 11월 27일 기준 후보 커밋은 `a9fe4553dcf6eb2774652bbb1e93d2358de93dda`다. Android 빌드 43과 Apple 빌드 15에서 `www/` 공통 파일 25개와 시험 Firebase 설정을 대조했다. [공통 빌드 및 자동 검증](https://github.com/KDYPOHO/peace-school-busan/actions/runs/45950312166)
+
+| 환경 | 후보 빌드 | 확인한 범위 |
+|---|---|---|
+| Android 7.0·16 에뮬레이터 | 43 | 앱 시작, 가상 문의·답변과 출석 화면 회귀 검사 통과 |
+| iPhone·iPad 시뮬레이터 | 15 | 양쪽 앱 설치와 시작 통과 |
+| Apple Silicon Mac (`Mac15,3`, macOS 27.2.1) | 15, Xcode 개발 서명 | 시험 Firebase 로그인, 온라인 출석 저장, 문의 발송, 알림에서 운영진 답변 열기, 읽음 기록 재조회 통과 |
+| Pixel 5 실기기 (Android 11·API 30) | 43, 시험 APK | Test Lab 기본 실행과 자동 탐색 통과. 가상 계정의 로그인·출석·문의 흐름은 미검증. [Pixel 5 결과](https://console.firebase.google.com/project/hanbando-peace-school-qa/testlab/histories/bh.4c2fdb24b53056aa/matrices/6865330913274194458) |
+| Galaxy Tab S8 실기기 (Android 14·API 34) | 43, 시험 APK | 한국어·가로 방향에서 Test Lab 기본 실행과 자동 탐색 통과. 가상 계정 자동 로그인은 확인되지 않음. [Galaxy Tab S8 결과](https://console.firebase.google.com/project/hanbando-peace-school-qa/testlab/histories/bh.4c2fdb24b53056aa/matrices/7550342388503393454) |
+| iPhone SE 3 실기기 (iOS 26.3) | 15, 시험 IPA | 한국어·세로 방향 Test Lab 검사 접수. [iPhone SE 3 진행 상태](https://console.firebase.google.com/project/hanbando-peace-school-qa/testlab/histories/bh.4c2fdb24b53056aa/matrices/8467789990125918884) |
+
+iPhone 실기기 결과 확인과 iPad 실기기 검증이 남아 있다. 11월 27일 Test Lab iOS 카탈로그에서는 실행 가능한 iPad가 조회되지 않았다. 같은 계정으로 플랫폼을 바꿔 수행하는 실기기 시나리오와 Play Console·TestFlight 내부 채널 설치도 확인이 필요하다. Android AAB는 업로드 서명 전 상태다.
+
 ## 업로드 서명
 
 Play Console에서 패키지와 사용 중인 업로드 인증서를 확인한다. 호환되는 업로드 키를 로컬 비밀 저장소에서 관리하고 다음 환경 변수를 로컬 프로세스에 주입한다.

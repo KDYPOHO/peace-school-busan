@@ -25,8 +25,11 @@ if (mode === 'production') {
 }
 
 await mkdir('www/vendor', { recursive: true });
-const options = { bundle: true, format: 'esm', minify: true, target: ['chrome79', 'safari15'], legalComments: 'inline' };
+const options = { bundle: true, format: 'esm', minify: true, target: ['chrome69', 'safari15'], legalComments: 'inline' };
 await Promise.all([
+  build({ ...options, entryPoints: ['www/js/app.js'],
+    external: ['../vendor/firebase.js', '../vendor/qr.js', '../vendor/runtime.js'],
+    outfile: 'www/vendor/app.js' }),
   build({ ...options, stdin: {
     contents: `export { initializeApp } from 'firebase/app'; export * as Auth from 'firebase/auth'; export * as Firestore from 'firebase/firestore';`,
     resolveDir: process.cwd()

@@ -26,7 +26,10 @@ const D = {
 // 해외 지역회의(예시 구분). 협의회 이름은 직접 입력.
 export const OVERSEAS = ["미주", "일본", "중국", "아세안", "유럽·중동·아프리카", "중남미", "대양주"];
 
-export const REGION_COUNCILS = Object.fromEntries(Object.entries(D).map(([k, v]) => [k, v.split(" ").map(x => x + "협의회")]));
+export const REGION_COUNCILS = Object.keys(D).reduce((regions, key) => {
+  regions[key] = D[key].split(" ").map(name => name + "협의회");
+  return regions;
+}, {});
 export const DOMESTIC = Object.keys(D);
 export const NONE = "해당 없음 (일반 청년)";
 

@@ -26,7 +26,7 @@ public class AppLaunchTest {
             openDemo(scenario);
             assertEventually(scenario, "Packaged sign-in screen and logo", """
                 document.title === '한반도 평화학교' && !!document.querySelector('#authForm') &&
-                (document.querySelector('.auth img.signature')?.naturalWidth || 0) > 0
+                (document.querySelector('.auth img.signature') || {}).naturalWidth > 0
                 """);
         }
     }
@@ -67,7 +67,7 @@ public class AppLaunchTest {
                 """);
             assertEventually(scenario, "Participant sees sent inquiry and pending state", """
                 document.querySelector('main').textContent.includes('답변 대기') &&
-                document.querySelector('.inquiry-text')?.textContent === '강의 출석을 확인해 주세요.' &&
+                document.querySelector('.inquiry-text') && document.querySelector('.inquiry-text').textContent === '강의 출석을 확인해 주세요.' &&
                 document.querySelector('#helpText').value === '' &&
                 !document.querySelector('#helpForm button').disabled
                 """);
@@ -84,11 +84,11 @@ public class AppLaunchTest {
                 (() => {
                   const form = document.querySelector('[data-ans]');
                   form.querySelector('textarea').value = '출석 내역을 확인했습니다.';
-                  form.requestSubmit();
+                  form.querySelector('button[type=submit]').click();
                 })()
                 """);
             assertEventually(scenario, "Staff sees answer count", """
-                document.querySelector('[data-help-filter=answered]')?.textContent.includes('1건')
+                document.querySelector('[data-help-filter=answered]') && document.querySelector('[data-help-filter=answered]').textContent.includes('1건')
                 """);
             evaluate(scenario, """
                 localStorage.setItem('psb_camNotice','true');
@@ -96,7 +96,7 @@ public class AppLaunchTest {
                   constructor(id) { this.host = document.getElementById(id); }
                   async start() { this.host.append(document.createElement('video')); }
                   async stop() { sessionStorage.setItem('qaCameraStopped','yes'); }
-                  clear() { this.host.replaceChildren(); }
+                  clear() { this.host.textContent = ""; }
                 };
                 document.querySelector('[data-tab=scan]').click();
                 document.querySelector('#camBtn').click();
@@ -108,10 +108,10 @@ public class AppLaunchTest {
                 """);
             evaluate(scenario, """
                 document.querySelector('#manualNo').value = 'BS27-QA0001';
-                document.querySelector('#manualForm').requestSubmit();
+                document.querySelector('#manualForm button[type=submit]').click();
                 """);
             assertEventually(scenario, "Manual attendance leaves the camera active", """
-                document.querySelector('#scanResult')?.textContent.includes('출석 완료') &&
+                document.querySelector('#scanResult') && document.querySelector('#scanResult').textContent.includes('출석 완료') &&
                 document.querySelectorAll('#reader video').length === 1
                 """);
             evaluate(scenario, """
@@ -129,15 +129,15 @@ public class AppLaunchTest {
                 """);
             switchAccount(scenario, "participant");
             assertEventually(scenario, "New staff reply appears on participant navigation", """
-                document.querySelector('[data-tab=ai]')?.classList.contains('new-reply')
+                document.querySelector('[data-tab=ai]') && document.querySelector('[data-tab=ai]').classList.contains('new-reply')
                 """);
             evaluate(scenario, "document.querySelector('#bellBtn').click()");
             assertEventually(scenario, "Inbox includes the participant's new reply", """
-                document.querySelector('[data-inbox-index]')?.textContent.includes('문의 답변')
+                document.querySelector('[data-inbox-index]') && document.querySelector('[data-inbox-index]').textContent.includes('문의 답변')
                 """);
             evaluate(scenario, "document.querySelector('[data-inbox-index]').click()");
             assertEventually(scenario, "Participant sees staff reply", """
-                document.querySelector('.inquiry-reply')?.textContent.includes('출석 내역을 확인했습니다.') &&
+                document.querySelector('.inquiry-reply') && document.querySelector('.inquiry-reply').textContent.includes('출석 내역을 확인했습니다.') &&
                 !document.querySelector('[data-tab=ai]').classList.contains('new-reply')
                 """);
             evaluate(scenario, """

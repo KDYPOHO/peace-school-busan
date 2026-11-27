@@ -34,10 +34,7 @@ adb shell getprop ro.build.version.sdk | tr -d '\r' | grep -Fx "$api"
     adb shell dumpsys package com.android.chrome | grep -E 'Package \[|versionName=' || true
   fi
 } | tee "$evidence/webview.txt"
-if [[ "$api" -eq 24 ]]; then
-  adb shell svc wifi disable
-  adb shell svc data disable
-else
+if [[ "$api" -ge 30 ]]; then
   adb shell cmd connectivity airplane-mode enable
 fi
 cd android

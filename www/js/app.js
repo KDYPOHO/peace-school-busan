@@ -1071,7 +1071,7 @@ function stopScanner() {
       if (session.started) await session.scanner.stop();
       session.scanner?.clear();
     } catch {
-      session.reader.replaceChildren();
+      session.reader.textContent = "";
     } finally {
       stream?.getTracks().forEach(track => track.stop());
     }

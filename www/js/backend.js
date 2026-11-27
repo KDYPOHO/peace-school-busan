@@ -13,7 +13,7 @@ export async function keepFirstAnswer(save, readCurrent) {
     throw error;
   }
 }
-export const isNative = globalThis.window?.Capacitor?.isNativePlatform?.() === true;
+export const isNative = typeof window !== "undefined" && window.Capacitor?.isNativePlatform?.() === true;
 
 function makeNo() {
   const t = Date.now().toString(36).slice(-4).toUpperCase();
@@ -107,7 +107,7 @@ async function firebaseBackend(settings, emulator) {
               F.getDocsFromServer(query(collection(db, name), where('uid', '==', uid)))),
             F.getDocsFromServer(collection(db, 'users', uid, 'inboxReads'))
           ]);
-          const refs = snapshots.flatMap(snap => snap.docs.map(item => item.ref));
+          const refs = snapshots.reduce((refs, snap) => refs.concat(snap.docs.map(item => item.ref)), []);
           refs.push(doc(db, 'users', uid));
           for (let offset = 0; offset < refs.length; offset += 400) {
             const batch = F.writeBatch(db);
@@ -189,8 +189,8 @@ async function firebaseBackend(settings, emulator) {
       const items = sources.map(() => []);
       const unsubs = sources.map((source, index) => onSnapshot(source, snapshot => {
         items[index] = rows(snapshot).map(row => ({ ...row, at: toMs(row.at) }));
-        cb(items.flat().sort((a, b) => b.at - a.at));
-      }, error => { items[index] = []; cb(items.flat()); onError?.(error); }));
+        cb([].concat(...items).sort((a, b) => b.at - a.at));
+      }, error => { items[index] = []; cb([].concat(...items)); onError?.(error); }));
       return () => unsubs.forEach(unsub => unsub());
     },
     async addNotice(n) { ensureOnline(); await F.addDoc(collection(db, "notices"), { ...n, at: ts(), by: api.user.uid }); },

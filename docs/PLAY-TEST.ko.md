@@ -48,6 +48,8 @@ iPad 시험판의 참가자·운영진 계정 흐름과 Play Console·TestFlight
 
 Android 46과 iPad 시험판 16의 공통 웹 파일 25개를 대조했다. iPad에 시험판 16을 설치했다. 대기 화면과 승인 후 과정 화면을 확인하는 iPad XCTest를 빌드했으며, 기기 잠금 때문에 실행을 보류했다. 양쪽 내부 채널 배포는 진행 전이다.
 
+iPad(A16) 시뮬레이터(iPadOS 26.5)에서 Apple 시험 빌드 16으로 가입 승인 XCTest 1건을 통과했다. 승인 대기 중에는 과정 메뉴를 열 수 없었고, 시험 운영진이 승인하자 같은 로그인 상태에서 출석 메뉴와 수강번호 복사 버튼이 표시됐다. 시험 Firebase에서 승인 시각과 운영진 기록을 확인했다. 시뮬레이터 앱과 서명된 시험 IPA의 공통 파일 27개가 일치했다.
+
 Pixel 5 실기기(Android 11)는 Android 시험 빌드 47에서 가입 승인 실기기 검사를 통과했다. 승인 전에는 대기 화면과 과정 메뉴 차단을 확인했고, 시험 운영진 승인 후 같은 로그인 상태에서 출석 메뉴와 QR 수강증이 열렸다. Android 46·47의 웹 파일과 Capacitor 래퍼 27개 해시는 모두 일치했다. [실기기 승인 결과](https://console.firebase.google.com/project/hanbando-peace-school-qa/testlab/histories/bh.4c2fdb24b53056aa/matrices/6080358177710308262) · [Android 테스트 빌드](https://github.com/KDYPOHO/peace-school-busan/actions/runs/45969037294)
 
 Galaxy Tab S8 실기기(Android 14·가로 화면)에서도 같은 Android 시험 빌드 47로 가입 승인 검사를 통과했다. 승인 대기 중에는 과정 메뉴가 차단됐다. 시험 운영진이 승인하자 같은 로그인 상태에서 출석 메뉴와 QR 수강증, 수강번호 복사 버튼이 표시됐다. 첫 실행에서는 로그인 시각이 갱신되지 않아 시험 도구가 승인을 실행하지 못했다. 두 번째 실행에서 실제 승인 기록과 테스트 XML 1건 통과를 대조했다. [Galaxy Tab S8 가입 승인 검사](https://console.firebase.google.com/project/hanbando-peace-school-qa/testlab/histories/bh.4c2fdb24b53056aa/matrices/7781770770058600757)

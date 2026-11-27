@@ -27,9 +27,14 @@ async function firebaseBackend() {
     try { await A.setPersistence(auth, A.browserLocalPersistence); } catch (e) {}
   }
   auth.languageCode = "ko";
-  const db = F.initializeFirestore(app, { localCache: F.persistentLocalCache ? F.persistentLocalCache() : undefined });
-  const { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocs, serverTimestamp, addDoc } = F;
+  const db = F.initializeFirestore(app, {
+    localCache: F.persistentLocalCache ? F.persistentLocalCache() : undefined,
+    // WebKit에서 스트림 응답이 지연될 수 있어 iOS 앱에서는 긴 폴링 사용
+    experimentalForceLongPolling: isNative && window.Capacitor.getPlatform?.() === "ios"
+  });
+  const { doc, getDoc, getDocFromServer, setDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocsFromServer, serverTimestamp, addDoc, runTransaction, writeBatch } = F;
   const ts = () => serverTimestamp();
+  const profileData = s => s.exists() ? { id: s.id, ...s.data() } : null;
   const toMs = v => (v && v.toMillis ? v.toMillis() : (typeof v === "number" ? v : Date.now()));
   const rows = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
@@ -57,27 +62,34 @@ async function firebaseBackend() {
     async resetPassword(email) { await A.sendPasswordResetEmail(auth, email); },
     async signOut() { await A.signOut(auth); },
     async deleteAccount() {
-      const uid = api.user.uid;
+      const authUser = auth.currentUser, { uid } = authUser;
       // 개인정보 보호법 제21조: 탈퇴 시 본인 정보 지체 없이 파기
-      for (const c of ["attendance", "questions"]) {
-        try { const snap = await getDocs(query(collection(db, c), where("uid", "==", uid))); await Promise.all(snap.docs.map(d => deleteDoc(d.ref))); } catch (e) { console.warn(c, e); }
-      }
-      try { await deleteDoc(doc(db, "deepApps", uid)); } catch (e) {}
-      await deleteDoc(doc(db, "users", uid));
-      await A.deleteUser(auth.currentUser);
+      const history = await Promise.all(["attendance", "questions"].map(c =>
+        getDocsFromServer(query(collection(db, c), where("uid", "==", uid)))
+      ));
+      await Promise.all(history.flatMap(snap => snap.docs.map(d => deleteDoc(d.ref))));
+      const batch = writeBatch(db);
+      batch.delete(doc(db, "deepApps", uid));
+      batch.delete(doc(db, "signupApprovals", uid));
+      batch.delete(doc(db, "users", uid));
+      await batch.commit();
+      await A.deleteUser(authUser);
     },
 
-    async isStaff() {
-      try { return (await getDoc(doc(db, "staff", api.user.uid))).exists(); } catch (e) { return false; }
-    },
-    async getProfile() {
-      const s = await getDoc(doc(db, "users", api.user.uid));
-      return s.exists() ? { id: s.id, ...s.data() } : null;
+    async getAccount() {
+      const uid = api.user.uid;
+      const [profile, staff, approval] = await Promise.all(
+        ["users", "staff", "signupApprovals"].map(c => getDocFromServer(doc(db, c, uid)))
+      );
+      return { profile: profileData(profile), staff: staff.exists(), approved: profile.exists() && approval.exists() };
     },
     async createProfile(p) {
-      const data = { ...p, no: makeNo(), email: api.user.email, consent: true, consentAt: ts(), createdAt: ts() };
-      await setDoc(doc(db, "users", api.user.uid), data);
-      return { ...data, consentAt: Date.now(), createdAt: Date.now() };
+      const { uid, email } = api.user;
+      const ref = doc(db, "users", uid);
+      const data = { ...p, no: makeNo(), email, consent: true, consentAt: ts(), createdAt: ts() };
+      await runTransaction(db, async tx => {
+        if (!(await tx.get(ref)).exists()) tx.set(ref, data);
+      });
     },
     async updateProfile(p) { await updateDoc(doc(db, "users", api.user.uid), { ...p, updatedAt: ts() }); },
 
@@ -103,7 +115,15 @@ async function firebaseBackend() {
     watchUsers(cb) {
       return onSnapshot(collection(db, "users"), s => cb(rows(s).map(r => ({ ...r, uid: r.id, createdAt: toMs(r.createdAt) }))), () => cb([]));
     },
-    async getUser(uid) { const s = await getDoc(doc(db, "users", uid)); return s.exists() ? { uid, ...s.data() } : null; },
+    watchApprovals(cb) {
+      return onSnapshot(collection(db, "signupApprovals"), s => cb(new Set(s.docs.map(d => d.id))), () => cb(null));
+    },
+    async approveSignup(uid) {
+      const ref = doc(db, "signupApprovals", uid), by = api.user.uid;
+      await runTransaction(db, async tx => {
+        if (!(await tx.get(ref)).exists()) tx.set(ref, { by, at: ts() });
+      });
+    },
     async setMemberVerified(uid, v) { await updateDoc(doc(db, "users", uid), { memberVerified: v, verifiedBy: api.user.uid, verifiedAt: ts() }); },
 
     async getDeepApp() { const s = await getDoc(doc(db, "deepApps", api.user.uid)); return s.exists() ? s.data() : null; },
@@ -138,24 +158,42 @@ function demoBackend() {
   const KEY = "psb_demo_v1";
   const listeners = new Set();
   let D;
-  const blank = () => ({ me: null, staff: {}, users: {}, attendance: {}, deepApps: {}, notices: [], questions: [], scores: {} });
+  const blank = () => ({ me: null, staff: {}, users: {}, approvals: {}, attendance: {}, deepApps: {}, notices: [], questions: [], scores: {} });
   try { D = JSON.parse(localStorage.getItem(KEY)) || blank(); } catch (e) { D = blank(); }
+  D.approvals ||= {};
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) {} listeners.forEach(f => f()); };
   const sub = fn => { listeners.add(fn); fn(); return () => listeners.delete(fn); };
   let authCb = null;
+  function signIn(user) {
+    D.me = api.user = user;
+    save();
+    authCb?.(user);
+  }
   const api = {
     mode: "demo",
     user: null,
     canGoogle: false,
     onAuth(cb) { authCb = cb; api.user = D.me; setTimeout(() => cb(api.user), 0); return () => {}; },
-    async signInEmail(email) { D.me = { uid: "u_" + btoa(unescape(encodeURIComponent(email))).replace(/[^a-z0-9]/gi, "").slice(0, 16), email, name: "" }; if (!Object.keys(D.staff).length) D.staff[D.me.uid] = { label: "체험 운영진" }; api.user = D.me; save(); authCb && authCb(api.user); },
+    async signInEmail(email) {
+      const encoded = btoa(unescape(encodeURIComponent(email)));
+      const legacy = "u_" + encoded.replace(/[^a-z0-9]/gi, "").slice(0, 16);
+      const uid = D.users[legacy]?.email === email ? legacy : "u_" + encoded.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      signIn({ uid, email, name: "" });
+    },
     async signUpEmail(email, pw) { return api.signInEmail(email, pw); },
+    async signInDemoStaff() {
+      D.staff.demo_staff = { label: "체험 운영진" };
+      signIn({ uid: "demo_staff", email: "", name: "체험 운영진" });
+    },
     async resetPassword() {},
     async signOut() { D.me = null; api.user = null; save(); authCb && authCb(null); },
-    async deleteAccount() { for (const k of Object.keys(D.attendance)) if (D.attendance[k].uid === D.me.uid) delete D.attendance[k]; D.questions = D.questions.filter(q => q.uid !== D.me.uid); delete D.users[D.me.uid]; delete D.deepApps[D.me.uid]; return api.signOut(); },
-    async isStaff() { return !!D.staff[api.user.uid]; },
-    async getProfile() { return D.users[api.user.uid] || null; },
-    async createProfile(p) { const data = { ...p, no: makeNo(), email: api.user.email, consent: true, consentAt: Date.now(), createdAt: Date.now() }; D.users[api.user.uid] = data; save(); return data; },
+    async deleteAccount() { for (const k of Object.keys(D.attendance)) if (D.attendance[k].uid === D.me.uid) delete D.attendance[k]; D.questions = D.questions.filter(q => q.uid !== D.me.uid); delete D.users[D.me.uid]; delete D.approvals[D.me.uid]; delete D.deepApps[D.me.uid]; return api.signOut(); },
+    async getAccount() {
+      const { uid } = api.user;
+      const profile = D.users[uid] || null;
+      return { profile, staff: !!D.staff[uid], approved: !!profile && !!D.approvals[uid] };
+    },
+    async createProfile(p) { const { uid, email } = api.user; D.users[uid] ||= { ...p, no: makeNo(), email, consent: true, consentAt: Date.now(), createdAt: Date.now() }; save(); },
     async updateProfile(p) { Object.assign(D.users[api.user.uid], p, { updatedAt: Date.now() }); save(); },
     watchMyAttendance(cb) { return sub(() => cb(Object.entries(D.attendance).filter(([, a]) => a.uid === api.user?.uid).map(([id, a]) => ({ id, ...a })))); },
     async checkInOnline(n) { D.attendance[`${n}_${api.user.uid}`] = { uid: api.user.uid, lecture: n, method: "online", at: Date.now() }; save(); },
@@ -163,7 +201,8 @@ function demoBackend() {
     async removeAttendance(uid, n) { delete D.attendance[`${n}_${uid}`]; save(); },
     watchAllAttendance(cb) { return sub(() => cb(Object.entries(D.attendance).map(([id, a]) => ({ id, ...a })))); },
     watchUsers(cb) { return sub(() => cb(Object.entries(D.users).map(([uid, u]) => ({ uid, ...u })))); },
-    async getUser(uid) { return D.users[uid] ? { uid, ...D.users[uid] } : null; },
+    watchApprovals(cb) { return sub(() => cb(new Set(Object.keys(D.approvals)))); },
+    async approveSignup(uid) { if (!D.staff[api.user.uid] || !D.users[uid]) throw new Error("Cannot approve signup"); D.approvals[uid] ||= { by: api.user.uid, at: Date.now() }; save(); },
     async setMemberVerified(uid, v) { Object.assign(D.users[uid], { memberVerified: v, verifiedBy: api.user.uid, verifiedAt: Date.now() }); save(); },
     async getDeepApp() { return D.deepApps[api.user.uid] || null; },
     async submitDeepApp(d) { D.deepApps[api.user.uid] = { ...d, uid: api.user.uid, status: "submitted", at: Date.now() }; save(); },
@@ -180,16 +219,12 @@ function demoBackend() {
     watchScores(round, cb) { return sub(() => cb(Object.entries(D.scores).filter(([, s]) => s.round === round).map(([id, s]) => ({ id, ...s })))); },
     async saveScore(round, team, crit) { D.scores[`${round}_${team}_${api.user.uid}`] = { round, team, crit, judge: api.user.uid, at: Date.now() }; save(); },
     watchStaff(cb) { return sub(() => cb(Object.entries(D.staff).map(([id, s]) => ({ id, ...s })))); },
-    async addStaff(uid, label) { D.staff[uid] = { label }; save(); },
+    async addStaff(uid, label) { if (!D.approvals[uid]) throw new Error("Signup approval required"); D.staff[uid] = { label }; save(); },
     async removeStaff(uid) { delete D.staff[uid]; save(); }
   };
   return api;
 }
 
 export async function createBackend() {
-  if (firebaseConfig.apiKey) {
-    try { return await firebaseBackend(); }
-    catch (e) { console.error("Firebase를 불러오지 못해 체험 모드로 전환합니다", e); }
-  }
-  return demoBackend();
+  return firebaseConfig.apiKey ? firebaseBackend() : demoBackend();
 }

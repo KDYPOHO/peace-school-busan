@@ -1,0 +1,24 @@
+name: iOS 앱 빌드 (시뮬레이터)
+on:
+  push:
+    branches: [main]
+    paths: ["www/**", "ios/**", "capacitor.config.json", "package*.json", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["www/**", "ios/**", "capacitor.config.json", "package*.json", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx cap sync ios
+      - name: iOS 시뮬레이터용 빌드
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios/DerivedData CODE_SIGNING_ALLOWED=NO build

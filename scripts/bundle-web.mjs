@@ -35,7 +35,7 @@ await Promise.all([
     resolveDir: process.cwd()
   }, outfile: 'www/vendor/firebase.js' }),
   build({ ...options, stdin: {
-    contents: `export { Html5Qrcode } from 'html5-qrcode'; export { default as qrcode } from 'qrcode-generator';`,
+    contents: `export { Html5Qrcode } from 'html5-qrcode';`,
     resolveDir: process.cwd()
   }, outfile: 'www/vendor/qr.js' }),
   writeFile('www/vendor/runtime.js', `export default ${JSON.stringify(settings)};\n`)

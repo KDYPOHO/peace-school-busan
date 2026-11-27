@@ -45,7 +45,7 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .scan-result[data-state="ok"]{background:var(--ok-soft);color:var(--ok)}
 .scan-result[data-state="warn"]{background:var(--warn-soft);color:var(--warn)}
 .phone:has(.scan-card) .bar i::after{animation:none}
-.qr-pass{width:min(224px,100%);height:auto;aspect-ratio:1;margin:10px auto;padding:16px}
+.qr-pass{width:224px;max-width:100%;height:auto;aspect-ratio:1;margin:10px auto;padding:16px}
 .qr-pass svg{width:100%;height:auto}
 .inquiry-card .form p{margin:0}
 .inquiry-filters{margin-bottom:12px}

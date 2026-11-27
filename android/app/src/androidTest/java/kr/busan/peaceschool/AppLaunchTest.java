@@ -54,8 +54,14 @@ public class AppLaunchTest {
             assertEventually(scenario, "Participant navigation", "!!document.querySelector('[data-tab=att]')");
             evaluate(scenario, "document.querySelector('[data-view=home] [data-go=att]').click()");
             assertEventually(scenario, "Static participant QR", """
-                !!document.querySelector('.qr-pass svg') && !!document.querySelector('#copyEnrollmentNo') && !document.querySelector('.flip') &&
-                getComputedStyle(document.body).touchAction === 'manipulation'
+                !!document.querySelector('.qr-pass svg') && !!document.querySelector('#copyEnrollmentNo') && !document.querySelector('.flip')
+                """);
+            assertEventually(scenario, "Double-tap zoom is disabled while pinch zoom remains supported", """
+                (() => {
+                  const touch = getComputedStyle(document.body).touchAction;
+                  return touch === 'manipulation' || ['pan-x', 'pan-y', 'pinch-zoom']
+                    .every(value => touch.split(' ').includes(value));
+                })()
                 """);
             evaluate(scenario, """
                 document.querySelector('#attendanceHelp').click();
@@ -178,7 +184,16 @@ public class AppLaunchTest {
             if ("true".equals(evaluate(scenario, "Boolean(" + condition + ")"))) return;
             SystemClock.sleep(250);
         } while (SystemClock.elapsedRealtime() < deadline);
-        assertTrue(description, false);
+        final String diagnostics = evaluate(scenario, """
+            JSON.stringify({
+              userAgent: navigator.userAgent,
+              tab: (document.querySelector('main') || {}).dataset,
+              qr: !!document.querySelector('.qr-pass svg'),
+              enrollmentCopy: !!document.querySelector('#copyEnrollmentNo'),
+              touchAction: getComputedStyle(document.body).touchAction
+            })
+            """);
+        assertTrue(description + ": " + diagnostics, false);
     }
 
     private String evaluate(ActivityScenario<MainActivity> scenario, String script)

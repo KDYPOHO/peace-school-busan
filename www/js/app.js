@@ -1,3 +1,4 @@
+import qrcode from "qrcode-generator";
 // 한반도 평화학교 앱 (참가자 + 운영진)
 import { APP, LECTURES, VENUE, PASS_COUNT, ONSITE_CAP, DEEP, TEAMS, CRITERIA, REGIONS, DEEP_STATUS } from "./config.js";
 import { createBackend, isNative, newRequestId } from "./backend.js";
@@ -75,7 +76,7 @@ const courseEnded = () => todayStr() >= LECTURES[LECTURES.length - 1].date;
 const remainingFor = attended => LECTURES.filter(l => lectureState(l) !== "past" && !attended.includes(l.n)).length;
 
 /* ───────── 상태 ───────── */
-let B, noticeUnsub, noticeEpoch = 0, qrGenerator;
+let B, noticeUnsub, noticeEpoch = 0;
 const testLabel = () => B.environment === "staging" ? '<span class="pill p-warn">시험용</span>'
   : B.environment === "development" ? '<span class="pill p-warn">개발용</span>' : "";
 const S = {
@@ -225,7 +226,7 @@ function confetti(cv) {
   (function tick() { ctx.clearRect(0, 0, W, H); ps.forEach(p => { p.vy += .32; p.vx *= .985; p.x += p.vx; p.y += p.vy; p.r += p.vr; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.globalAlpha = Math.max(0, 1 - f / 120); ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); ctx.restore(); }); if (++f < 130) requestAnimationFrame(tick); })();
 }
 function qrSvg(text) {
-  try { const q = qrGenerator(0, "M"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); }
+  try { const q = qrcode(0, "M"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); }
   catch (e) { return `<div style="color:#14213D;font-size:.8rem;text-align:center;padding:20px">QR을 표시하지 못했어요.<br>아래 수강번호를 운영진에게 알려 주세요.</div>`; }
 }
 // 민주평통 심벌: CI 원본(투명 PNG) 그대로, 배지·테두리·그림자·움직임 없음
@@ -1497,7 +1498,6 @@ async function boot() {
     }
     return;
   }
-  void loadQrLibrary().then(lib => { qrGenerator = lib.qrcode; if (S.role === "p" && S.tab.p === "att") refresh(); }).catch(() => {});
   let first = true;
   const finishSplash = () => {
     if (!first) return;

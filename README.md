@@ -23,12 +23,12 @@
 
 ```
 www/                 웹 앱 (이 폴더가 그대로 웹·안드로이드·아이폰 앱이 됨)
-  js/config.js       강의 날짜, 정원, Firebase 설정 등 ← 운영 정보는 여기만 고치면 됨
+  js/config.js       기수·강의·정원 및 시험 기준
   js/app.js          화면과 동작
   js/backend.js      Firebase / 체험 모드 데이터 처리
   js/faq.js          도우미 답변집
   js/councils.js     민주평통 지역회의·협의회 목록 (국내 17 + 해외)
-firestore.rules      데이터 보안 규칙 (Firebase 콘솔에 게시된 내용과 같음)
+firestore.rules      배포 후보 데이터 보안 규칙
 android/  ios/       Capacitor로 만든 네이티브 앱 프로젝트
 .github/workflows/   웹 자동 배포, 안드로이드 APK 자동 빌드
 ```
@@ -44,7 +44,15 @@ android/  ios/       Capacitor로 만든 네이티브 앱 프로젝트
 
 ## 운영 정보 바꾸기
 
-강의 날짜·제목, 정원, 심화과정 일정, 지원 마감은 `www/js/config.js` 에 있습니다. 고쳐서 `main`에 올리면 웹은 몇 분 안에 자동 반영되고, 안드로이드 APK도 자동으로 다시 빌드됩니다.
+강의 날짜·제목과 정원은 `www/js/config.js`에서 관리합니다. Firestore의 `courseSchedule/1`~`5` 문서에는 온라인 출석에 쓰는 `opensAt`·`closesAt` 타임스탬프를 저장합니다. 심화 지원 화면과 서버 판단은 `courseSchedule/deep.closesAt`의 마감 시각을 사용합니다. 운영 문서는 확정 일정을 기준으로 작성합니다.
+
+### 1.3.2 Firebase 연결 및 검증
+
+- 운영 대상은 기존 **Busan Peace School** 프로젝트 `kdypoho`입니다. `PSB_BUILD_MODE=production npm run build:web`는 기존의 공개 웹 SDK 설정을 사용합니다.
+- 시험 빌드는 `PSB_BUILD_MODE=staging`과 두 변수 `PSB_STAGING_PROJECT_ID`, `PSB_STAGING_FIREBASE_CONFIG`의 일치하는 별도 프로젝트 설정이 필요합니다. `kdypoho`를 시험 대상으로 지정하면 빌드가 실패합니다.
+- 로컬 개발은 `npm ci`, `PSB_BUILD_MODE=development npm run build:web` 순서로 실행합니다. 에뮬레이터는 `npx firebase emulators:start --project demo-hanbando-school --only auth,firestore`, 시험 일정은 `node scripts/staging-schedule.mjs --emulator`로 준비합니다. 웹에서 `?emulator=localhost`로 열거나 데이터가 기기에만 저장되는 체험은 `?demo=1`로 선택합니다.
+- 두 플랫폼 패키지는 같은 빌드 모드에서 생성된 `www/`를 사용합니다. 준비한 Firebase 모드는 배포 전 `python3 scripts/verify_web_assets.py <패키지 또는 public 폴더> <모드>`로 검증합니다. 자동 검증은 `npm test`와 `npm run test:firebase`를 실행합니다.
+- 운영 규칙 적용 전 활성 규칙을 보관하고, 전체 공지를 조회하는 이전 앱과 좌석 기록 없는 기존 심화 선발 상태의 호환성을 확인합니다. 기존 선발자는 기록을 보존하며 좌석을 배정합니다. 정원 또는 데이터 불일치가 있으면 운영진 확인을 먼저 받습니다. 시험 마감 6월 20일은 시험 일정에만 사용합니다.
 
 ## 휴대폰에서 시험하기
 

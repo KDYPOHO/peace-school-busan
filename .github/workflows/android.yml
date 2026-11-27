@@ -2,9 +2,9 @@ name: 안드로이드 앱 빌드 (APK)
 on:
   push:
     branches: [main, codex/android-play-test]
-    paths: ["www/**", "android/**", "scripts/**", "tests/**", "capacitor.config.json", "package*.json", ".github/workflows/android.yml"]
+    paths: ["www/**", "android/**", "scripts/**", "tests/**", "capacitor.config.json", "package*.json", "firebase.json", "firestore.rules", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["www/**", "android/**", "scripts/**", "tests/**", "capacitor.config.json", "package*.json", ".github/workflows/android.yml"]
+    paths: ["www/**", "android/**", "scripts/**", "tests/**", "capacitor.config.json", "package*.json", "firebase.json", "firestore.rules", ".github/workflows/android.yml"]
   workflow_dispatch:
 permissions:
   contents: write
@@ -32,15 +32,24 @@ jobs:
           allprojects { p -> swap(p.buildscript.repositories); swap(p.repositories) }
           G
       - run: npm ci
-      - run: node --test tests/*.test.mjs
+      - run: npm test
+      - run: npm run test:firebase
+      - name: Firebase 설정을 포함한 공통 자산 생성
+        env:
+          PSB_BUILD_MODE: ${{ github.ref == 'refs/heads/main' && 'production' || (vars.PSB_STAGING_PROJECT_ID && 'staging' || 'development') }}
+          PSB_STAGING_PROJECT_ID: ${{ vars.PSB_STAGING_PROJECT_ID }}
+          PSB_STAGING_FIREBASE_CONFIG: ${{ vars.PSB_STAGING_FIREBASE_CONFIG }}
+        run: npm run build:web
       - run: npx cap sync android
       - name: 디버그 APK 및 서명 전 AAB 빌드
         working-directory: android
         run: chmod +x gradlew && ./gradlew testDebugUnitTest assembleDebug bundleRelease --no-daemon
       - name: 패키지 안의 공통 웹 파일 확인
+        env:
+          PSB_BUILD_MODE: ${{ github.ref == 'refs/heads/main' && 'production' || (vars.PSB_STAGING_PROJECT_ID && 'staging' || 'development') }}
         run: |
-          python3 scripts/verify_web_assets.py android/app/build/outputs/apk/debug/app-debug.apk
-          python3 scripts/verify_web_assets.py android/app/build/outputs/bundle/release/app-release.aab
+          python3 scripts/verify_web_assets.py android/app/build/outputs/apk/debug/app-debug.apk "$PSB_BUILD_MODE"
+          python3 scripts/verify_web_assets.py android/app/build/outputs/bundle/release/app-release.aab "$PSB_BUILD_MODE"
       - uses: actions/upload-artifact@v4
         with:
           name: peace-school-debug-apk
@@ -55,6 +64,8 @@ jobs:
       - name: Android 16 에뮬레이터에서 앱 시작 검사
         if: github.ref != 'refs/heads/main'
         run: |
+          PSB_BUILD_MODE=development npm run build:web
+          npx cap sync android
           sudo chmod 666 /dev/kvm
           sdkmanager_bin=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)
           test -n "$sdkmanager_bin"

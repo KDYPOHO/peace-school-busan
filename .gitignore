@@ -11,3 +11,5 @@ android/local.properties
 ios/App/build/
 ios/App/Pods/
 ios/DerivedData/
+www/vendor/
+.firebase/

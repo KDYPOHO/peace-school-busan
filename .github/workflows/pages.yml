@@ -2,7 +2,7 @@ name: 웹 앱 배포 (GitHub Pages)
 on:
   push:
     branches: [main]
-    paths: ["www/**", ".github/workflows/pages.yml"]
+    paths: ["www/**", "package*.json", "scripts/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -11,10 +11,17 @@ permissions:
 concurrency: { group: pages, cancel-in-progress: true }
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build:web
+        env:
+          PSB_BUILD_MODE: production
       - uses: actions/configure-pages@v5
         with: { enablement: true }
       - uses: actions/upload-pages-artifact@v3

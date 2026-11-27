@@ -1,24 +1,13 @@
 // ─────────────────────────────────────────────────────────────
 // 한반도 평화학교 앱 설정
-// Firebase 콘솔 > 프로젝트 설정 > 내 앱(웹)의 firebaseConfig 값을 붙여 넣으세요.
-// apiKey가 비어 있으면 앱은 "체험 모드"(이 기기에만 저장)로 동작합니다.
-// 이 값들은 공개용 식별자이며, 데이터 보호는 firestore.rules가 담당합니다.
+// Firebase 연결 설정은 빌드 모드로 주입합니다.
 // ─────────────────────────────────────────────────────────────
-export const firebaseConfig = {
-  apiKey: "AIzaSyCnlr7phzPqBWBt1i_RhGGZUj6QhEgcxig",
-  authDomain: "kdypoho.firebaseapp.com",
-  projectId: "kdypoho",
-  storageBucket: "kdypoho.firebasestorage.app",
-  messagingSenderId: "701264486422",
-  appId: "1:701264486422:web:a6a02a8e45d5a610fb5537"
-};
-
 export const APP = {
   displayName: "한반도 평화학교",
   name: "한반도 평화학교",
   cohortName: "부산 청년 과정",
   org: "민주평화통일자문회의 부산지역회의",
-  version: "1.3.1",
+  version: "1.3.2",
   year: 2027,
   privacyVersion: "2027-01",          // 개인정보 처리방침 버전 (바꾸면 재동의 안내)
   termsVersion: "2027-01",            // 이용약관 버전

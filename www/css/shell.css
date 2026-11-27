@@ -104,3 +104,8 @@ body.doc{overflow:auto;padding:24px max(16px,env(safe-area-inset-left,0px))!impo
   main[data-view="scan"] > section:first-child,
   main[data-view="noti"] > section:nth-child(3) { grid-column: 1 / -1; }
 }
+
+.home-course-actions{margin-top:12px}
+.course-mode{margin-top:10px;color:var(--muted)}
+.inbox-item{display:grid;gap:3px;width:100%;min-height:44px;padding:10px 8px;text-align:start;color:inherit;background:transparent;border:0;border-bottom:1px solid var(--line);font:inherit;overflow-wrap:anywhere}
+.inbox-item:focus-visible,[id^="reply-"]:focus-visible{outline:2px solid var(--brand-2);outline-offset:2px;border-radius:8px}

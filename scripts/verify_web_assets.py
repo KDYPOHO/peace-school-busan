@@ -1,6 +1,7 @@
 """Compare a Capacitor package or copied public directory with the tracked web source."""
 
 from hashlib import sha256
+from json import loads
 from pathlib import Path
 from sys import argv
 from zipfile import ZipFile
@@ -17,6 +18,17 @@ def hashes(directory):
 source = Path(__file__).resolve().parents[1] / "www"
 artifact = Path(argv[1])
 expected = hashes(source)
+runtime = source / "vendor/runtime.js"
+if len(argv) > 2:
+    settings = loads(runtime.read_text().removeprefix("export default ").strip().removesuffix(";"))
+    mode = argv[2]
+    if settings.get("mode") != mode:
+        raise SystemExit(f"Expected {mode} Firebase mode, found {settings.get('mode')}")
+    project = settings.get("firebase", {}).get("projectId")
+    if ((mode == "production" and project != "kdypoho")
+            or (mode == "staging" and (not project or project == "kdypoho"))
+            or (mode == "development" and project)):
+        raise SystemExit(f"Unexpected Firebase project for {mode} mode")
 if artifact.is_dir():
     actual = hashes(artifact)
 else:

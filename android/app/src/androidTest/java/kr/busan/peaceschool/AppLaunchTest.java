@@ -23,6 +23,7 @@ public class AppLaunchTest {
         assertEquals(24, context.getApplicationInfo().minSdkVersion);
 
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            openDemo(scenario);
             assertEventually(scenario, "Packaged sign-in screen and logo", """
                 document.title === '한반도 평화학교' && !!document.querySelector('#authForm') &&
                 (document.querySelector('.auth img.signature')?.naturalWidth || 0) > 0
@@ -33,6 +34,7 @@ public class AppLaunchTest {
     @Test
     public void sendsInquiryAndReplyAndKeepsOneCameraPreview() throws InterruptedException {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            openDemo(scenario);
             assertEventually(scenario, "Local demo login in airplane mode", """
                 !!document.querySelector('#authForm') && document.body.textContent.includes('체험 모드')
                 """);
@@ -50,9 +52,9 @@ public class AppLaunchTest {
                 })()
                 """);
             assertEventually(scenario, "Participant navigation", "!!document.querySelector('[data-tab=att]')");
-            evaluate(scenario, "document.querySelector('[data-tab=att]').click()");
+            evaluate(scenario, "document.querySelector('[data-view=home] [data-go=att]').click()");
             assertEventually(scenario, "Static participant QR", """
-                !!document.querySelector('.qr-pass') && !document.querySelector('.flip') &&
+                !!document.querySelector('.qr-pass svg') && !!document.querySelector('#copyEnrollmentNo') && !document.querySelector('.flip') &&
                 getComputedStyle(document.body).touchAction === 'manipulation'
                 """);
             evaluate(scenario, """
@@ -112,6 +114,15 @@ public class AppLaunchTest {
                 document.querySelector('#scanResult')?.textContent.includes('출석 완료') &&
                 document.querySelectorAll('#reader video').length === 1
                 """);
+            evaluate(scenario, """
+                const select = document.querySelector('#scanL');
+                select.value = select.value === '1' ? '2' : '1';
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+                """);
+            assertEventually(scenario, "Changing sessions releases the camera and clears the previous result", """
+                document.querySelector('#reader').hidden && document.querySelector('#scanResult').hidden &&
+                !document.querySelector('#reader video') && sessionStorage.getItem('qaCameraStopped') === 'yes'
+                """);
             evaluate(scenario, "document.querySelector('[data-tab=dash]').click()");
             assertEventually(scenario, "Leaving attendance releases the camera", """
                 !document.querySelector('#reader') && sessionStorage.getItem('qaCameraStopped') === 'yes'
@@ -120,7 +131,11 @@ public class AppLaunchTest {
             assertEventually(scenario, "New staff reply appears on participant navigation", """
                 document.querySelector('[data-tab=ai]')?.classList.contains('new-reply')
                 """);
-            evaluate(scenario, "document.querySelector('[data-tab=ai]').click()");
+            evaluate(scenario, "document.querySelector('#bellBtn').click()");
+            assertEventually(scenario, "Inbox includes the participant's new reply", """
+                document.querySelector('[data-inbox-index]')?.textContent.includes('문의 답변')
+                """);
+            evaluate(scenario, "document.querySelector('[data-inbox-index]').click()");
             assertEventually(scenario, "Participant sees staff reply", """
                 document.querySelector('.inquiry-reply')?.textContent.includes('출석 내역을 확인했습니다.') &&
                 !document.querySelector('[data-tab=ai]').classList.contains('new-reply')
@@ -134,6 +149,13 @@ public class AppLaunchTest {
                 location.reload();
                 """);
         }
+    }
+
+    private void openDemo(ActivityScenario<MainActivity> scenario) {
+        scenario.onActivity(activity -> {
+            var bridge = activity.getBridge();
+            bridge.getWebView().loadUrl(bridge.getLocalUrl() + "/?demo=1");
+        });
     }
 
     private void switchAccount(ActivityScenario<MainActivity> scenario, String role)

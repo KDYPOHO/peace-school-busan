@@ -38,35 +38,114 @@ service cloud.firestore {
       allow delete: if isStaff() || (signedIn() && uid == me());
     }
 
-    // 출결 (문서 ID = "{강}_{uid}")
+    function onlineWindow(n) {
+      let schedule = get(/databases/$(database)/documents/courseSchedule/$(string(n))).data;
+      return schedule.opensAt <= request.time && request.time <= schedule.closesAt;
+    }
+    function validAttendance(id, d) {
+      return d.lecture is int && d.lecture >= 1 && d.lecture <= 5
+        && d.uid is string && id == string(d.lecture) + '_' + d.uid
+        && d.at == request.time
+        && exists(/databases/$(database)/documents/users/$(d.uid));
+    }
     match /attendance/{id} {
-      allow read: if isStaff() || (signedIn() && resource.data.uid == me());
-      allow create: if isStaff()
-        || (signedIn()
-            && request.resource.data.uid == me()
-            && request.resource.data.method == 'online'
-            && id == string(request.resource.data.lecture) + '_' + me());
-      allow update: if isStaff();
-      // 탈퇴 시 본인 출결 파기 (개인정보 보호법 제21조)
+      allow get: if isStaff() || (signedIn() && (
+        resource != null && resource.data.uid == me()
+        || resource == null && id in ['1_' + me(), '2_' + me(), '3_' + me(), '4_' + me(), '5_' + me()]
+      ));
+      allow list: if isStaff() || (signedIn() && resource.data.uid == me());
+      allow create: if signedIn() && validAttendance(id, request.resource.data) && (
+        isStaff() && request.resource.data.keys().hasOnly(['uid', 'lecture', 'method', 'at', 'by'])
+          && request.resource.data.method in ['qr', 'manual'] && request.resource.data.by == me()
+        || request.resource.data.keys().hasOnly(['uid', 'lecture', 'method', 'at'])
+          && request.resource.data.uid == me() && request.resource.data.method == 'online'
+          && onlineWindow(request.resource.data.lecture)
+      );
       allow delete: if isStaff() || (signedIn() && resource.data.uid == me());
     }
 
-    // 심화과정 지원서 (문서 ID = 본인 uid)
-    match /deepApps/{uid} {
-      allow read: if isStaff() || (signedIn() && uid == me());
-      allow create: if signedIn() && uid == me() && request.resource.data.status == 'submitted';
-      allow update: if isStaff()
-        || (signedIn() && uid == me() && onlyChanges(['essay', 'arrival', 'updatedAt']));
-      allow delete: if isStaff() || (signedIn() && uid == me());
+    match /courseSchedule/{id} {
+      allow read: if signedIn();
     }
 
-    // 공지 (모든 로그인 사용자 읽기, 운영진 쓰기)
+    function seatPath(n) {
+      return /databases/$(database)/documents/deepSeats/$(string(n));
+    }
+    function deepPath(uid) {
+      return /databases/$(database)/documents/deepApps/$(uid);
+    }
+    function seatOwnerAfter(n, uid) {
+      return n is int && n >= 1 && n <= 40
+        && existsAfter(seatPath(n)) && getAfter(seatPath(n)).data.uid == uid;
+    }
+    function freedSeat(n) {
+      return n is int && !existsAfter(seatPath(n));
+    }
+    function validSelection(uid) {
+      let old = resource.data;
+      let next = request.resource.data;
+      return onlyChanges(['status', 'decidedAt', 'seat'])
+        && next.uid == uid && next.decidedAt == request.time
+        && (next.status == 'selected'
+              && seatOwnerAfter(next.seat, uid)
+              && (old.status != 'selected' || old.get('seat', 0) == next.seat)
+            || next.status in ['submitted', 'waitlist', 'rejected']
+              && !next.keys().hasAny(['seat'])
+              && (old.status != 'selected' || freedSeat(old.get('seat', 0))));
+    }
+    function beforeDeepDeadline() {
+      return request.time < get(/databases/$(database)/documents/courseSchedule/deep).data.closesAt;
+    }
+    match /deepApps/{uid} {
+      allow read: if isStaff() || (signedIn() && uid == me());
+      allow create: if signedIn() && uid == me() && beforeDeepDeadline()
+        && request.resource.data.uid == uid && request.resource.data.status == 'submitted'
+        && request.resource.data.at == request.time
+        && request.resource.data.keys().hasOnly(['uid', 'status', 'essay', 'arrival', 'theme', 'at']);
+      allow update: if isStaff() && validSelection(uid)
+        || (signedIn() && uid == me() && beforeDeepDeadline()
+          && onlyChanges(['essay', 'arrival', 'updatedAt']));
+      allow delete: if signedIn() && (uid == me() || isStaff())
+        && (resource.data.status != 'selected' || freedSeat(resource.data.get('seat', 0)));
+    }
+
+    match /deepSeats/{slot} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && request.resource.data.keys().hasOnly(['uid', 'seat'])
+        && request.resource.data.uid is string
+        && request.resource.data.seat is int && request.resource.data.seat >= 1 && request.resource.data.seat <= 40
+        && slot == string(request.resource.data.seat)
+        && existsAfter(deepPath(request.resource.data.uid))
+        && getAfter(deepPath(request.resource.data.uid)).data.status == 'selected'
+        && getAfter(deepPath(request.resource.data.uid)).data.seat == request.resource.data.seat;
+      allow delete: if signedIn() && (isStaff() || resource.data.uid == me())
+        && (!existsAfter(deepPath(resource.data.uid))
+          || getAfter(deepPath(resource.data.uid)).data.status != 'selected');
+    }
+
+    function selected() {
+      return exists(deepPath(me())) && get(deepPath(me())).data.status == 'selected';
+    }
+    function noticeVisible(audience) {
+      return audience == 'all' || audience == 'deep' && selected();
+    }
     match /notices/{id} {
-      allow read: if signedIn();
-      allow write: if isStaff();
+      allow read: if isStaff() || signedIn() && noticeVisible(resource.data.audience);
+      allow create, update: if isStaff() && request.resource.data.audience in ['all', 'deep'];
+      allow delete: if isStaff();
+    }
+
+    match /users/{uid}/inboxReads/{key} {
+      allow read, delete: if signedIn() && uid == me();
+      allow create: if signedIn() && uid == me()
+        && request.resource.data.keys().hasOnly(['at']) && request.resource.data.at == request.time;
     }
 
     // 참가자 문의·운영진 답변
+    function ownsQuestionId(id) {
+      return me().matches('^[A-Za-z0-9_-]+$') && id.matches('^' + me() + '_[a-f0-9]{32}$');
+    }
     match /questions/{id} {
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['uid', 'text', 'at', 'status'])
@@ -76,7 +155,11 @@ service cloud.firestore {
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0
         && request.resource.data.text.size() <= 500;
-      allow read: if isStaff() || (signedIn() && resource.data.uid == me());
+      allow list: if isStaff() || (signedIn() && resource.data.uid == me());
+      allow get: if isStaff() || (signedIn() && (
+        resource != null && resource.data.uid == me()
+        || resource == null && ownsQuestionId(id)
+      ));
       allow update: if isStaff()
         && onlyChanges(['answer', 'status', 'answeredAt', 'answeredBy'])
         && resource.data.get('answer', '') == ''

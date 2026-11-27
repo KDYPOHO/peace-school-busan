@@ -1,7 +1,7 @@
 // 한반도 평화학교 앱 (참가자 + 운영진)
-import { APP, LECTURES, VENUE, PASS_COUNT, ONSITE_CAP, DEEP, TEAMS, CRITERIA, REGIONS, DEEP_APPLY_UNTIL, DEEP_STATUS } from "./config.js";
-import { createBackend, isNative } from "./backend.js";
-import { countedLectures } from "./course.js";
+import { APP, LECTURES, VENUE, PASS_COUNT, ONSITE_CAP, DEEP, TEAMS, CRITERIA, REGIONS, DEEP_STATUS } from "./config.js";
+import { createBackend, isNative, newRequestId } from "./backend.js";
+import { countedLectures, lectureWindow, onlineOpenAt } from "./course.js";
 import { faqAnswer, FAQ_CHIPS } from "./faq.js";
 import { ORG_ROOT, REGION_COUNCILS, DOMESTIC, OVERSEAS, NONE as ORG_NONE, affiliationLabel, affiliationFull } from "./councils.js";
 const MEMBER_TYPES = ["자문위원", "청년 서포터즈·추천 청년", "일반 청년"];
@@ -64,25 +64,26 @@ function confirmSheet(title, body, okLabel, danger) {
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 const kstNow = () => new Date(Date.now() + 9 * 3600e3);
 const todayStr = () => kstNow().toISOString().slice(0, 10);
-const kstMinutes = () => { const d = kstNow(); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
-const toMin = hm => { const [h, m] = hm.split(":").map(Number); return h * 60 + m; };
 function fmtDate(iso) { const [y, m, d] = iso.split("-").map(Number); const w = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); return `${y}. ${m}. ${d}.(${DOW[w]})`; }
 function fmtTime(ms) { if (!ms) return ""; const d = new Date(ms + 9 * 3600e3); return `${d.getUTCMonth() + 1}. ${d.getUTCDate()}. ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`; }
 function lectureState(l) { const t = todayStr(); return l.date < t ? "past" : l.date === t ? "today" : "future"; }
 const todayLecture = () => LECTURES.find(l => l.date === todayStr());
-const nextLecture = () => LECTURES.find(l => l.date >= todayStr());
-function onlineOpen(l) { if (!l || lectureState(l) !== "today") return false; const m = kstMinutes(); return m >= toMin(l.start) - 30 && m <= toMin(l.end) + 60; }
+const nextLecture = () => LECTURES.find(l => lectureWindow(l).start > Date.now());
+const onlineLecture = () => LECTURES.find(l => onlineOpenAt(l, Date.now()));
+const onlineOpen = l => l && onlineOpenAt(l, Date.now());
 const courseEnded = () => todayStr() >= LECTURES[LECTURES.length - 1].date;
 const remainingFor = attended => LECTURES.filter(l => lectureState(l) !== "past" && !attended.includes(l.n)).length;
 
 /* ───────── 상태 ───────── */
-let B;
+let B, noticeUnsub, noticeEpoch = 0, qrGenerator;
+const testLabel = () => B.environment === "staging" ? '<span class="pill p-warn">시험용</span>'
+  : B.environment === "development" ? '<span class="pill p-warn">개발용</span>' : "";
 const S = {
   user: null, profile: null, staff: false, role: "p",
   tab: { p: "home", a: "dash" },
-  myAtt: [], notices: [], deepApp: null, myQs: [],
+  myAtt: [], notices: [], deepApp: null, myQs: [], reads: new Set(), inboxError: false,
   users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [],
-  myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpSending: false, answerDrafts: {}, answerSending: new Set(), helpFilter: "open", helpLimit: 25,
+  myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpSending: false, answerDrafts: {}, answerErrors: {}, answerSending: new Set(), helpFilter: "open", helpLimit: 25,
   judge: { round: "예선", team: 0 }, scanLecture: null, chat: [], authMode: "login", onboardStep: 0, draft: {}
 };
 let unsubs = [], staffUnsubs = [];
@@ -110,7 +111,8 @@ function shell() {
     <div class="top-row">
       <div class="mark"><img src="img/symbol.png" alt="민주평통 심벌"></div>
       <div class="top-title"><b>${esc(APP.displayName)}</b><span id="topOrg">${esc(S.profile ? affiliationFull(S.profile) : ORG_ROOT)}</span></div>
-      <button class="bell" id="bellBtn" aria-label="공지함">${ic("home").replace(ICON.home, '<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>')}<i id="bellDot" hidden></i></button>
+      ${testLabel()}
+      <button class="bell" id="bellBtn" aria-label="앱 알림함">${ic("home").replace(ICON.home, '<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>')}<i id="bellDot" hidden></i></button>
     </div>
     <div class="seg" id="seg" role="group" aria-label="화면 구분" hidden>
       <button id="roleP" aria-pressed="true">참가자</button><button id="roleA" aria-pressed="false">운영진</button>
@@ -127,6 +129,7 @@ function setRole(r) {
   if (S.role === r) return;
   if (S.role === "a") stopScanner();
   S.role = r; LS.set("role", r);
+  startNotices();
   if (r === "a") startStaffData();
   render(r === "a" ? "fwd" : "back");
 }
@@ -145,7 +148,7 @@ function render(anim) {
   nav.innerHTML = '<span class="ind"></span>' + tabs.map(([k, l, i]) => `<button data-tab="${k}" ${k === cur ? 'aria-current="page"' : ""}>${ic(i)}<span>${l}</span></button>`).join("");
   const v = $("#view");
   v.dataset.view = cur;
-  if (S.role === "p") updateInquiryBadge(cur === "ai");
+  if (S.role === "p") updateInquiryBadge();
   if (S.role === "p" && !S.profile) v.innerHTML = onboardCard();
   else v.innerHTML = VIEWS[cur]();
   [...v.children].forEach((c, i) => c.style.setProperty("--i", i));
@@ -164,6 +167,7 @@ function render(anim) {
 // 데이터가 바뀌면 다시 그림. 입력 중이면 입력이 끝난 뒤에.
 function refresh() {
   if (!S.user || !$("#view")) return;
+  updateBell();
   if (S.helpSending && S.role === "p" && S.tab.p === "ai") {
     pending = true;
     return;
@@ -177,6 +181,7 @@ function refresh() {
 document.addEventListener("focusout", () => setTimeout(() => { if (pending) refresh(); }, 200));
 function go(t) {
   const tabs = TABS[S.role].map(x => x[0]);
+  if (!tabs.includes(t)) return;
   const dir = tabs.indexOf(t) < tabs.indexOf(S.tab[S.role]) ? "back" : "fwd";
   if (S.tab[S.role] === "scan") { if (t === "scan") return; stopScanner(); }
   S.tab[S.role] = t; render(dir); $("#view").scrollTop = 0; $("#view").focus({ preventScroll: true });
@@ -220,8 +225,8 @@ function confetti(cv) {
   (function tick() { ctx.clearRect(0, 0, W, H); ps.forEach(p => { p.vy += .32; p.vx *= .985; p.x += p.vx; p.y += p.vy; p.r += p.vr; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.globalAlpha = Math.max(0, 1 - f / 120); ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); ctx.restore(); }); if (++f < 130) requestAnimationFrame(tick); })();
 }
 function qrSvg(text) {
-  try { const q = window.qrcode(0, "M"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); }
-  catch (e) { return `<div style="color:#14213D;font-size:.8rem;text-align:center;padding:20px">QR을 불러오지 못했어요.<br>인터넷 연결을 확인해 주세요.</div>`; }
+  try { const q = qrGenerator(0, "M"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); }
+  catch (e) { return `<div style="color:#14213D;font-size:.8rem;text-align:center;padding:20px">QR을 표시하지 못했어요.<br>아래 수강번호를 운영진에게 알려 주세요.</div>`; }
 }
 // 민주평통 심벌: CI 원본(투명 PNG) 그대로, 배지·테두리·그림자·움직임 없음
 const coin = () => `<img class="seal" src="img/symbol.png" alt="" aria-hidden="true">`;
@@ -229,20 +234,51 @@ const archiveCard = () => `<section class="card"><a class="arch" href="${APP.arc
 
 /* ───────── 공지 ───────── */
 function visibleNotices() {
-  const sel = S.deepApp && S.deepApp.status === "selected";
-  return S.notices.filter(n => !n.audience || n.audience === "all" || (n.audience === "deep" && (sel || S.role === "a")));
+  return S.notices;
+}
+const noticeItem = n => ({ key: "n_" + n.id, id: n.id, title: n.title, body: n.body, at: n.at, type: "공지" });
+const replyItem = q => ({ key: "q_" + q.id, id: q.id, title: q.text, at: q.answeredAt, type: "문의 답변" });
+function inboxItems() {
+  return [...visibleNotices().map(noticeItem), ...S.myQs.filter(q => q.answer).map(replyItem)]
+    .sort((a, b) => (b.at || 0) - (a.at || 0));
 }
 function updateBell() {
-  const dot = $("#bellDot"); if (!dot) return;
-  const last = LS.get("seen_" + (S.user && S.user.uid), 0);
-  dot.hidden = !visibleNotices().some(n => n.at > last);
-  $("#bellBtn").classList.toggle("ringing", !dot.hidden);
+  const dot = $("#bellDot");
+  if (!dot) return;
+  const unread = inboxItems().filter(item => !S.reads.has(item.key)).length;
+  dot.hidden = !unread;
+  $("#bellBtn").setAttribute("aria-label", unread ? `앱 알림함, 읽지 않은 알림 ${unread}건` : "앱 알림함");
+}
+async function readInboxItem(item) {
+  if (S.reads.has(item.key)) return;
+  const uid = S.user?.uid;
+  try {
+    await B.markInboxRead(item.key);
+  } catch {
+    if (S.user?.uid === uid) toast("읽음 상태를 저장하지 못했어요. 연결 후 다시 열어 주세요.");
+  }
+}
+function openInboxItem(item) {
+  closeSheet();
+  if (item.type === "공지") {
+    sheet(`<h2>${esc(item.title)}</h2><p class="small muted">${fmtTime(item.at)}</p><p class="inquiry-text">${esc(item.body)}</p>`);
+  } else {
+    if (S.role !== "p") setRole("p");
+    go("ai");
+    const article = document.getElementById("reply-" + item.id);
+    article?.focus();
+    article?.scrollIntoView({ block: "center" });
+  }
+  void readInboxItem(item);
 }
 function openNotices() {
-  LS.set("seen_" + S.user.uid, Date.now()); updateBell();
-  const ns = visibleNotices();
-  sheet(`<h2 style="margin:0 0 4px;font-size:1.05rem">공지함</h2><p class="small muted" style="margin:0 0 10px">사무처와 운영진이 올린 공식 안내입니다.</p>
-  ${ns.length ? `<div class="list">${ns.map(n => `<div class="li"><div class="body"><div class="k">${esc(n.title)}</div><div class="small" style="white-space:pre-wrap;margin-top:2px">${esc(n.body)}</div><div class="small muted" style="margin-top:4px">${fmtTime(n.at)}${n.audience === "deep" ? " · 심화과정 선발자" : ""}</div></div></div>`).join("")}</div>` : '<p class="small muted">아직 올라온 공지가 없어요.</p>'}`);
+  const items = inboxItems();
+  sheet(`<h2>알림함</h2>
+    ${(S.noticesError || S.inboxError || S.myQuestionsError) ? '<p class="small muted">일부 알림을 불러오지 못했어요.</p><button class="btn ghost mini" id="inboxRetry">다시 시도</button>' : ""}
+    ${items.length ? `<div class="list">${items.map((item, i) => `<button type="button" class="inbox-item" data-inbox-index="${i}"><span class="small muted">${item.type} · ${fmtTime(item.at)}${S.reads.has(item.key) ? "" : " · 읽지 않음"}</span><strong>${esc(item.title)}</strong></button>`).join("")}</div>` : '<p class="small muted">받은 알림이 없어요.</p>'}`);
+  $$("#sbg [data-inbox-index]").forEach(button => { button.onclick = () => openInboxItem(items[Number(button.dataset.inboxIndex)]); });
+  const retry = $("#inboxRetry");
+  if (retry) retry.onclick = () => location.reload();
 }
 
 /* ───────── 로그인 ───────── */
@@ -266,7 +302,7 @@ function renderAuth() {
   const signup = !deletionPage && S.authMode === "signup";
   $("#root").innerHTML = `
   <div class="auth">
-    <div class="logo"><img class="signature" src="img/puac-signature-ko.jpg" alt="민주평화통일자문회의"><b>${esc(APP.displayName)}</b><span>${esc(APP.cohortName)}</span></div>
+    <div class="logo"><img class="signature" src="img/puac-signature-ko.jpg" alt="민주평화통일자문회의"><b>${esc(APP.displayName)}</b><span>${esc(APP.cohortName)}</span>${testLabel()}</div>
     <section class="card">
       <h2 style="margin:0 0 4px">${deletionPage ? "계정 및 데이터 삭제" : signup ? "회원가입" : "로그인"}</h2>
       <p class="small muted" style="margin:0 0 12px">${deletionPage ? "삭제하려는 계정으로 로그인한 뒤 삭제를 확인해 주세요." : signup ? "이메일과 비밀번호로 계정을 만든 뒤 수강 신청서를 작성해요." : "수강 신청, QR 출석, 수료증을 앱 하나로 관리해요."}</p>
@@ -323,7 +359,7 @@ function accountRemovalSheet() {
     return;
   }
   const verify = method === 'password' ? '<label class="f">현재 비밀번호<input id="deletePassword" type="password" autocomplete="current-password" required></label>' : '';
-  sheet(`<h2>계정 및 데이터 삭제</h2><p>로그인 계정과 수강 신청, 출결, 문의, 심화과정 지원 기록을 삭제합니다. 삭제한 기록은 되돌릴 수 없습니다.</p><form class="form" id="deleteAccountForm">${verify}<p class="err" id="deleteError" role="alert"></p><button class="btn danger block" id="confirmDeletion" type="submit">${method === 'google' ? 'Google 본인 확인 후 삭제' : '계정 삭제'}</button></form>`);
+  sheet(`<h2>계정 및 데이터 삭제</h2><p>로그인 계정과 수강 신청, 출결, 문의, 알림 읽음 상태, 심화과정 지원 기록을 삭제합니다. 삭제한 기록은 되돌릴 수 없습니다.</p><form class="form" id="deleteAccountForm">${verify}<p class="err" id="deleteError" role="alert"></p><button class="btn danger block" id="confirmDeletion" type="submit">${method === 'google' ? 'Google 본인 확인 후 삭제' : '계정 삭제'}</button></form>`);
   $('#deleteAccountForm').onsubmit = async event => {
     event.preventDefault();
     const button = $('#confirmDeletion');
@@ -445,16 +481,9 @@ const orgKey = u => (u.orgRegion && u.orgRegion !== ORG_NONE ? u.orgRegion : ORG
 function lectureCard(l, tag) {
   return `<h2>${esc(l.title)}</h2><p>${fmtDate(l.date)} ${l.start}~${l.end} · ${esc(VENUE)}</p>`;
 }
-function updateInquiryBadge(viewing) {
+function updateInquiryBadge() {
   const tab = $('[data-tab="ai"]');
-  if (!tab) return;
-  const key = "inquiry_seen_" + S.user.uid, seen = LS.get(key, 0);
-  const latest = S.myQs.reduce((time, q) => Math.max(time, q.answeredAt || 0), 0);
-  if (latest <= seen) return;
-  if (viewing) {
-    LS.set(key, latest);
-    return;
-  }
+  if (!tab || !S.myQs.some(q => q.answer && !S.reads.has("q_" + q.id))) return;
   tab.classList.add("new-reply");
   tab.setAttribute("aria-label", "도우미, 새 문의 답변 있음");
 }
@@ -467,15 +496,23 @@ function inquiryReply(q) {
 const VIEWS = {
   home() {
     const att = myAttended(), c = att.length, need = Math.max(0, PASS_COUNT - c), rem = remainingFor(att);
-    const tl = todayLecture(), nl = nextLecture();
-    const l = tl || nl;
+    const active = onlineLecture();
+    const today = todayLecture();
+    const tl = active || (today && lectureWindow(today).close >= Date.now() ? today : null);
+    const l = tl || nextLecture();
+    const online = S.profile.mode === "online";
     const done = l && att.includes(l.n);
     const ns = visibleNotices().slice(0, 3);
     const reach = c + rem >= PASS_COUNT;
     return `
     <section class="card hero has-coin">${coin()}
       ${l ? `<div class="eyebrow">${tl ? "오늘" : "다음 강의"} · 기본과정 ${l.n}강${l.tag ? " · " + l.tag : ""}</div>${lectureCard(l)}
-      <div class="row wrap" style="margin-top:12px">${done ? '<span class="pill p-ok">✓ 출석 완료</span>' : tl ? '<button class="btn" data-go="att">출석하기</button>' : '<button class="btn" data-go="sched">전체 일정</button>'}</div>`
+      <p class="course-mode">${online ? "온라인 참여" : "현장 참여"} · ${done ? "출석 완료" : tl ? "출석 기록 없음" : "출석 예정"}</p>
+      <div class="row wrap home-course-actions">${online
+        ? `<button class="btn" id="homeOnline" ${done || !active || S.onlineSending ? "disabled" : ""}>${done ? "출석 완료" : active ? "온라인 출석" : "온라인 출석 대기"}</button>`
+        : '<button class="btn" data-go="att">QR 수강증</button>'}
+        <button class="btn ghost" data-go="sched">전체 일정</button></div>
+      <p id="onlineStatus" class="small" role="status" ${S.onlineStatus ? "" : "hidden"}>${esc(S.onlineStatus || "")}</p>`
         : `<div class="eyebrow">기본과정 종료</div><h2>${esc(S.profile.name)}님, 수고 많으셨어요</h2><p>${c >= PASS_COUNT ? "수료증은 내 정보에서 볼 수 있어요." : "다음 기수에서 다시 만나요."}</p>`}
     </section>
     <section class="card">
@@ -486,7 +523,7 @@ const VIEWS = {
       ${c < PASS_COUNT && reach && rem === need ? '<p class="small" style="margin:10px 0 0;color:var(--warn)">남은 강의를 모두 들어야 수료할 수 있어요.</p>' : ""}
     </section>
     <section class="card">
-      <div class="row between"><h2 style="margin:0">공지</h2><button class="btn ghost mini" id="allNoti">전체 보기</button></div>
+      <div class="row between"><h2 style="margin:0">공지</h2><button class="btn ghost mini" id="allNoti">알림함</button></div>
       ${ns.length ? `<div class="list" style="margin-top:8px">${ns.map(n => `<div class="li"><div class="dot">${ic("send", 16)}</div><div class="body"><div class="small k">${esc(n.title)}</div><div class="small muted">${fmtTime(n.at)}</div></div></div>`).join("")}</div>` : '<p class="small muted" style="margin:8px 0 0">아직 공지가 없어요. 새 공지가 오면 종 모양에 점이 생겨요.</p>'}
     </section>
     ${S.profile.privacyVersion !== APP.privacyVersion || S.profile.termsVersion !== APP.termsVersion ? `<section class="card"><div class="row between"><h2 style="margin:0">처리방침·약관이 바뀌었어요</h2><span class="pill p-warn">확인 필요</span></div><p class="small muted" style="margin:6px 0 10px">바뀐 내용을 확인해 주세요. 동의하지 않으면 내 정보에서 탈퇴할 수 있어요.</p><div class="row wrap" style="gap:8px"><button class="btn ghost mini" id="vPv">처리방침</button><button class="btn ghost mini" id="vTm">이용약관</button><button class="btn mini" id="vOk">확인했어요</button></div></section>` : ""}
@@ -513,7 +550,7 @@ const VIEWS = {
     </section>`;
   },
   att() {
-    const tl = todayLecture(), att = myAttended(), p = S.profile;
+    const tl = onlineLecture() || todayLecture(), att = myAttended(), p = S.profile;
     const done = tl && att.includes(tl.n);
     const open = onlineOpen(tl);
     return `
@@ -529,7 +566,8 @@ const VIEWS = {
     <section class="card">
       <h2>온라인으로 듣는 경우</h2>
       <p class="small muted" style="margin:0 0 10px">강의 당일 ${tl ? `${tl.start} 30분 전부터 종료 1시간 뒤까지` : "시작 30분 전부터"} 아래 버튼을 누르면 온라인 출석이 기록돼요. 운영진이 중계 접속 기록과 대조해요.</p>
-      <button class="btn ghost block" id="onlineBtn" ${done || !open ? "disabled" : ""}>${done ? "출석 완료" : open ? "온라인 출석하기" : "강의 시간에 열려요"}</button>
+      <button class="btn ghost block" id="onlineBtn" ${done || !open || S.onlineSending ? "disabled" : ""}>${done ? "출석 완료" : open ? "온라인 출석하기" : "강의 시간에 열려요"}</button>
+      <p id="onlineStatus" class="small" role="status" ${S.onlineStatus ? "" : "hidden"}>${esc(S.onlineStatus || "")}</p>
     </section>
     <section class="card">
       <h2>내 출결</h2>
@@ -553,7 +591,7 @@ const VIEWS = {
     <section class="card inquiry-card">
       <h2>내 문의</h2>
       ${S.myQuestionsError ? '<p class="err" role="status">문의 내역을 불러오지 못했어요. 연결을 확인한 뒤 앱을 다시 열어 주세요.</p>' : ""}
-      <div class="list">${S.myQs.map(q => `<article class="li"><div class="body"><div class="row between"><span class="small muted">${fmtTime(q.at)}</span><span class="pill ${q.answer ? "p-ok" : "p-mute"}">${q.answer ? "답변 완료" : "답변 대기"}</span></div><div class="inquiry-text">${esc(q.text)}</div>${inquiryReply(q)}</div></article>`).join("") || '<p class="small muted">보낸 문의와 운영진 답변을 여기에서 확인할 수 있어요.</p>'}</div>
+      <div class="list">${S.myQs.map(q => `<article class="li" id="reply-${esc(q.id)}" tabindex="-1"><div class="body"><div class="row between"><span class="small muted">${fmtTime(q.at)}</span><span class="pill ${q.answer ? "p-ok" : "p-mute"}">${q.answer ? "답변 완료" : "답변 대기"}</span></div><div class="inquiry-text">${esc(q.text)}</div>${inquiryReply(q)}</div></article>`).join("") || '<p class="small muted">보낸 문의와 운영진 답변을 여기에서 확인할 수 있어요.</p>'}</div>
     </section>
     <section class="card">
       <div class="row between"><h2 style="margin:0">학습 도우미</h2><span class="small muted">공식 안내 기반 · 무료</span></div>
@@ -664,7 +702,8 @@ const VIEWS = {
     S.scanLecture = n;
     return `
     <section class="card">
-      <div class="row between"><h2 style="margin:0">현장 출석</h2><select id="scanL" aria-label="강의 선택" style="padding:6px 8px;border-radius:10px;border:1px solid var(--line);background:var(--surface)">${LECTURES.map(l => `<option value="${l.n}" ${l.n === n ? "selected" : ""}>${l.n}강 · ${fmtDate(l.date)}</option>`).join("")}</select></div>
+      <div class="row between"><h2 style="margin:0">회차별 출석</h2><select id="scanL" aria-label="강의 선택" style="padding:6px 8px;border-radius:10px;border:1px solid var(--line);background:var(--surface)">${LECTURES.map(l => `<option value="${l.n}" ${l.n === n ? "selected" : ""}>${l.n}강 · ${fmtDate(l.date)}</option>`).join("")}</select></div>
+      <p class="small muted" id="scanLectureTitle"></p>
       <div class="row between" style="margin:10px 0 6px"><span class="num"><b style="font-size:1.4rem" id="scanCount">0</b> / ${ONSITE_CAP}명 현장</span><span class="small muted" id="scanOnline"></span></div>
       <div class="bar"><i id="scanBar" style="width:0%"></i></div>
     </section>
@@ -689,7 +728,7 @@ const VIEWS = {
       <div class="chips inquiry-filters">${[["open", "답변 대기", open.length], ["answered", "답변 완료", answered.length]].map(([id, label, count]) => `<button class="chip" data-help-filter="${id}" aria-pressed="${id === S.helpFilter}">${label} ${count}건</button>`).join("")}</div>
       <div class="list">${shown.slice(0, S.helpLimit).map(q => {
         const u = S.users.find(x => x.uid === q.uid), sending = S.answerSending.has(q.id);
-        return `<article class="li"><div class="body"><div class="small muted">${esc(u ? u.name + " · " + u.no : "참가자")} · ${fmtTime(q.at)}</div><div class="inquiry-text">${esc(q.text)}</div>${q.answer ? inquiryReply(q) : `<form class="form inquiry-reply" data-ans="${esc(q.id)}"><label class="f">답변<textarea rows="3" maxlength="500" required>${esc(S.answerDrafts[q.id])}</textarea></label><p class="err" role="alert" hidden></p><button class="btn" type="submit" ${sending ? "disabled" : ""}>${sending ? "보내는 중…" : "답변 보내기"}</button></form>`}</div></article>`;
+        return `<article class="li"><div class="body"><div class="small muted">${esc(u ? u.name + " · " + u.no : "참가자")} · ${fmtTime(q.at)}</div><div class="inquiry-text">${esc(q.text)}</div>${q.answer ? inquiryReply(q) : `<form class="form inquiry-reply" data-ans="${esc(q.id)}"><label class="f">답변<textarea rows="3" maxlength="500" required>${esc(S.answerDrafts[q.id])}</textarea></label><p class="err" role="alert" ${S.answerErrors[q.id] ? "" : "hidden"}>${esc(S.answerErrors[q.id])}</p><button class="btn" type="submit" ${sending ? "disabled" : ""}>${sending ? "보내는 중…" : S.answerErrors[q.id] ? "다시 보내기" : "답변 보내기"}</button></form>`}</div></article>`;
       }).join("") || `<p class="small muted">${S.helpFilter === "open" ? "답변을 기다리는 문의가 없어요." : "답변한 문의가 없어요."}</p>`}</div>
       ${shown.length > S.helpLimit ? '<button class="btn ghost block" id="moreInquiries">문의 더 보기</button>' : ""}
     </section>
@@ -753,19 +792,23 @@ const VIEWS = {
 };
 
 function deepCard() {
-  const att = myAttended(), elig = att.length >= PASS_COUNT, closed = todayStr() > DEEP_APPLY_UNTIL, a = S.deepApp;
+  const att = myAttended(), elig = att.length >= PASS_COUNT, a = S.deepApp;
+  const deadline = S.deepDeadline;
+  const closed = !deadline || Date.now() >= deadline;
   let action;
   if (a) action = `<div class="row between"><span class="pill ${a.status === "selected" ? "p-ok" : a.status === "rejected" ? "p-bad" : a.status === "waitlist" ? "p-warn" : "p-mute"}">${DEEP_STATUS[a.status] || "검토 중"}</span>${a.status === "submitted" && !closed ? '<button class="btn ghost mini" id="editDeep">지원서 고치기</button>' : ""}</div>${a.status === "selected" ? '<p class="small" style="margin:8px 0 0">축하해요! 세부 일정과 준비물은 공지로 안내해 드려요.</p>' : ""}`;
+  else if (!deadline) action = '<button class="btn block" disabled>지원 일정 확인 중</button>';
   else if (closed) action = '<button class="btn block" disabled>지원이 마감됐어요</button>';
   else if (elig) action = '<button class="btn gold block" id="applyBtn">심화과정 지원하기</button>';
   else action = `<button class="btn block" disabled>${PASS_COUNT}강 출석 후 지원 가능</button>`;
   return `<section class="card">
     <div class="row between"><h2 style="margin:0">${esc(DEEP.title)}</h2><span class="pill p-gold">정원 ${DEEP.cap}명</span></div>
-    <p class="small muted" style="margin:6px 0 10px">${esc(DEEP.dates)} · 지원 마감 ${fmtDate(DEEP_APPLY_UNTIL)}. 오후 자유시간과 자율 참여 저녁 프로그램으로 여유 있게 진행해요.</p>
+    <p class="small muted" style="margin:6px 0 10px">${esc(DEEP.dates)} · ${deadline ? "지원 마감 " + fmtTime(deadline - 1) : "지원 일정 확인 중"}. 오후 자유시간과 자율 참여 저녁 프로그램으로 여유 있게 진행해요.</p>
     ${action}
   </section>`;
 }
 function deepForm() {
+  if (!S.deepDeadline || Date.now() >= S.deepDeadline) return toast("지원 일정을 확인해 주세요.");
   const a = S.deepApp || {};
   sheet(`<h2 style="margin:0 0 4px;font-size:1.05rem">심화과정 지원서</h2><p class="small muted" style="margin:0 0 12px">정원 ${DEEP.cap}명 · 운영위원회가 직접 읽고 선발해요.</p>
   <form class="form" id="deepForm">
@@ -964,20 +1007,8 @@ function userSheet(uid) {
 
 /* ───────── QR 스캐너 ───────── */
 let camera = null, cameraClosing = Promise.resolve(), qrLibrary = null;
-const CAMERA_SCRIPT = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
 function loadQrLibrary() {
-  if (window.Html5Qrcode) return Promise.resolve();
-  if (!qrLibrary) qrLibrary = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = CAMERA_SCRIPT;
-    script.onload = resolve;
-    script.onerror = () => {
-      script.remove();
-      qrLibrary = null;
-      reject(new Error("QR scanner library unavailable"));
-    };
-    document.head.appendChild(script);
-  });
+  if (!qrLibrary) qrLibrary = import("../vendor/qr.js").catch(error => { qrLibrary = null; throw error; });
   return qrLibrary;
 }
 function showScanResult(message, state = "info") {
@@ -1006,10 +1037,10 @@ async function startScanner() {
   setCameraButton(button, "opening");
   session.ready = (async () => {
     await cameraClosing;
-    await loadQrLibrary();
+    const Scanner = window.Html5Qrcode || (await loadQrLibrary()).Html5Qrcode;
     if (camera !== session) return;
     reader.hidden = false;
-    session.scanner = new window.Html5Qrcode("reader", { verbose: false });
+    session.scanner = new Scanner("reader", { verbose: false });
     await session.scanner.start({ facingMode: "environment" }, {
       fps: 10,
       qrbox(w, h) { const size = Math.floor(Math.min(w, h) * .7); return { width: size, height: size }; }
@@ -1063,16 +1094,18 @@ async function onScan(session, rawText) {
 async function checkIn(uid, method) {
   const u = S.users.find(x => x.uid === uid);
   if (!u) { showScanResult("등록되지 않은 참가자예요. 수강 신청 여부를 확인해 주세요.", "warn"); return false; }
-  const n = S.scanLecture, status = $("#scanResult");
+  const n = S.scanLecture, revision = S.scanRevision || 0, status = $("#scanResult");
+  const current = () => status?.isConnected && (S.scanRevision || 0) === revision;
+  showScanResult("출석 저장 중…");
   try {
     const r = await B.recordAttendance(uid, n, method);
-    if (status?.isConnected && S.scanLecture === n) {
+    if (current()) {
       showScanResult(r.duplicate ? `${u.name}님은 ${n}강 출석이 이미 기록되어 있어요.` : `${u.name}님 · ${n}강 출석 완료`, r.duplicate ? "warn" : "ok");
       navigator.vibrate?.(r.duplicate ? [40, 40, 40] : 80);
     }
     return true;
   } catch {
-    if (status?.isConnected && S.scanLecture === n) showScanResult("출석을 저장하지 못했어요. 인터넷에 연결한 뒤 다시 시도해 주세요.", "warn");
+    if (current()) showScanResult("출석을 저장하지 못했어요. 인터넷에 연결한 뒤 다시 시도해 주세요.", "warn");
     return false;
   }
 }
@@ -1081,6 +1114,7 @@ const PARTIAL = {
     const n = S.scanLecture, list = S.allAtt.filter(a => a.lecture === n);
     const on = list.filter(a => a.method !== "online").length;
     const c = $("#scanCount"); if (!c) return;
+    $("#scanLectureTitle").textContent = LECTURES.find(l => l.n === n)?.title || "";
     c.textContent = on; $("#scanBar").style.width = Math.min(100, on / ONSITE_CAP * 100) + "%";
     $("#scanOnline").textContent = `온라인 ${list.length - on}명 별도`;
     const rc = $("#recent");
@@ -1090,10 +1124,32 @@ const PARTIAL = {
   }
 };
 
+function bindOnline(button) {
+  if (!button) return;
+  button.onclick = async () => {
+    if (S.onlineSending) return;
+    const l = onlineLecture();
+    if (!l) { refresh(); return toast("현재 온라인 출석 가능 시간이 아니에요."); }
+    const uid = S.user.uid;
+    S.onlineSending = true;
+    S.onlineStatus = "출석 저장 중…";
+    refresh();
+    try {
+      const result = await B.checkInOnline(l.n);
+      if (S.user?.uid === uid) S.onlineStatus = result?.duplicate ? "이미 출석이 기록됐어요." : "출석 저장 완료";
+    } catch {
+      if (S.user?.uid === uid) S.onlineStatus = "저장하지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.";
+    } finally {
+      if (S.user?.uid === uid) { S.onlineSending = false; refresh(); }
+    }
+  };
+}
+
 /* ───────── 이벤트 연결 ───────── */
 const BIND = {
   home() {
     $("#allNoti").onclick = openNotices;
+    bindOnline($("#homeOnline"));
     const vOk = $("#vOk");
     if (vOk) { $("#vPv").onclick = privacySheet; $("#vTm").onclick = termsSheet; vOk.onclick = async () => { try { await B.updateProfile({ privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion }); Object.assign(S.profile, { privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion }); render(); } catch (e) { toast("저장하지 못했어요"); } }; }
     const a = $("#applyBtn"); a && (a.onclick = deepForm);
@@ -1103,14 +1159,7 @@ const BIND = {
   att() {
     $("#copyEnrollmentNo").onclick = () => copyText(S.profile.no, "수강번호를 복사했어요");
     $("#attendanceHelp").onclick = () => { go("ai"); $("#helpText").focus(); };
-    const o = $("#onlineBtn");
-    o && (o.onclick = async () => {
-      const l = todayLecture();
-      if (!onlineOpen(l)) { render(); return toast("현재 온라인 출석 가능 시간이 아니에요."); }
-      o.disabled = true;
-      try { await B.checkInOnline(l.n); const c = myAttended().length + (myAttended().includes(l.n) ? 0 : 1); celebrate("온라인 출석 완료", `${l.n}강 · ${fmtDate(l.date)}`, `${c} / ${LECTURES.length}강`); }
-      catch (e) { console.error(e); o.disabled = false; toast("출석을 기록하지 못했어요. 다시 눌러 주세요."); }
-    });
+    bindOnline($("#onlineBtn"));
   },
   ai() {
     const form = $("#helpForm"), field = $("#helpText");
@@ -1127,8 +1176,10 @@ const BIND = {
       button.textContent = "보내는 중…";
       let sent = false;
       try {
-        await B.askQuestion(text);
+        if (S.helpRequest?.text !== text) S.helpRequest = { id: newRequestId(), text };
+        await B.askQuestion(text, S.helpRequest.id);
         if (S.user?.uid !== uid) return;
+        S.helpRequest = null;
         sent = true;
         if (S.helpDraft.trim() === text) {
           S.helpDraft = "";
@@ -1153,7 +1204,7 @@ const BIND = {
           const currentButton = $("#helpForm button");
           if (currentButton) {
             currentButton.disabled = false;
-            currentButton.textContent = "문의 보내기";
+            currentButton.textContent = sent ? "문의 보내기" : "다시 보내기";
           }
         }
       }
@@ -1163,7 +1214,9 @@ const BIND = {
     $$("[data-askq]").forEach(b => (b.onclick = async () => {
       const m = S.chat[+b.dataset.askq]; if (!m || !m.ask) return;
       b.disabled = true;
-      try { await B.askQuestion(m.ask.slice(0, 500)); m.ask = null; S.chat.push({ who: "ai", text: "운영진에게 전달했어요. 답변이 오면 아래 '내 문의'에 보여요." }); render(); }
+      const uid = S.user.uid;
+      m.requestId ??= newRequestId();
+      try { await B.askQuestion(m.ask.slice(0, 500), m.requestId); if (S.user?.uid !== uid) return; m.ask = null; S.chat.push({ who: "ai", text: "운영진에게 전달했어요. 답변이 오면 아래 '내 문의'에 보여요." }); render(); }
       catch (e) { b.disabled = false; toast("전달하지 못했어요"); }
     }));
   },
@@ -1199,8 +1252,12 @@ const BIND = {
   },
   scan() {
     $("#scanL").onchange = e => {
+      stopScanner();
+      $("#manualNo").value = "";
+      const manualButton = $("#manualForm button");
+      manualButton.disabled = false;
+      S.scanRevision = (S.scanRevision || 0) + 1;
       S.scanLecture = +e.target.value;
-      if (camera) camera.lastCode = "";
       showScanResult("");
       PARTIAL.scan();
     };
@@ -1213,7 +1270,10 @@ const BIND = {
       const u = S.users.find(x => String(x.no).toUpperCase() === no);
       if (!u) { showScanResult("수강번호를 찾지 못했어요. 번호를 확인해 주세요.", "warn"); return; }
       button.disabled = true;
-      if (await checkIn(u.uid, "manual") && field.value.trim().toUpperCase() === no) field.value = "";
+      const revision = S.scanRevision || 0;
+      const accepted = await checkIn(u.uid, "manual");
+      if ((S.scanRevision || 0) !== revision) return;
+      if (accepted && field.value.trim().toUpperCase() === no) field.value = "";
       button.disabled = false;
     };
     PARTIAL.scan();
@@ -1240,6 +1300,7 @@ const BIND = {
         event.preventDefault();
         if (S.answerSending.has(id)) return;
         const text = field.value.trim();
+        delete S.answerErrors[id];
         error.hidden = true;
         if (!text) { error.textContent = "답변 내용을 적어 주세요."; error.hidden = false; return; }
         const uid = S.user.uid;
@@ -1250,18 +1311,28 @@ const BIND = {
           const accepted = await B.answerQuestion(id, text);
           if (S.user?.uid !== uid) return;
           delete S.answerDrafts[id];
+          delete S.answerErrors[id];
           field.blur();
           toast(accepted ? "참가자에게 답변을 보냈어요." : "다른 운영진이 먼저 답변했어요. 답변 완료 목록을 확인해 주세요.");
         } catch {
           if (S.user?.uid !== uid) return;
-          error.textContent = "답변을 보내지 못했어요. 입력한 답변을 확인하고 다시 시도해 주세요.";
-          error.hidden = false;
+          S.answerErrors[id] = "답변을 보내지 못했어요. 입력한 답변을 확인하고 다시 시도해 주세요.";
+          const currentForm = $$("[data-ans]").find(candidate => candidate.dataset.ans === id);
+          const currentError = currentForm?.querySelector(".err");
+          if (currentError) {
+            currentError.textContent = S.answerErrors[id];
+            currentError.hidden = false;
+          }
         } finally {
           if (S.user?.uid === uid) {
             S.answerSending.delete(id);
             if (error.isConnected && error.hidden) refresh();
-            button.disabled = false;
-            button.textContent = "답변 보내기";
+            const currentForm = $$("[data-ans]").find(candidate => candidate.dataset.ans === id);
+            const currentButton = currentForm?.querySelector("button");
+            if (currentButton) {
+              currentButton.disabled = false;
+              currentButton.textContent = S.answerErrors[id] ? "다시 보내기" : "답변 보내기";
+            }
           }
         }
       };
@@ -1288,7 +1359,31 @@ const BIND = {
 };
 
 /* ───────── 데이터 구독 ───────── */
-function stopAll() { S._profSubs = false; unsubs.forEach(u => u && u()); unsubs = []; staffUnsubs.forEach(u => u && u()); staffUnsubs = []; }
+function stopAll() {
+  S._profSubs = false;
+  noticeEpoch++;
+  noticeUnsub?.();
+  noticeUnsub = null;
+  unsubs.forEach(unsub => unsub?.());
+  staffUnsubs.forEach(unsub => unsub?.());
+  unsubs = [];
+  staffUnsubs = [];
+}
+function startNotices() {
+  noticeUnsub?.();
+  const epoch = ++noticeEpoch;
+  S.notices = [];
+  S.noticesError = false;
+  noticeUnsub = B.watchNotices({ staff: S.staff && S.role === "a", selected: S.deepApp?.status === "selected" }, rows => {
+    if (epoch !== noticeEpoch) return;
+    S.notices = rows;
+    refresh();
+  }, () => {
+    if (epoch !== noticeEpoch) return;
+    S.noticesError = true;
+    refresh();
+  });
+}
 function restartScores() {
   if (S._scoreUnsub) S._scoreUnsub();
   S._scoreUnsub = B.watchScores(S.judge.round, r => { S.scores = r; if (S.tab.a === "judge") { const tb = $("#rankBody"); tb ? (tb.innerHTML = rankRows()) : refresh(); } });
@@ -1318,17 +1413,20 @@ async function onSignedIn(u) {
   if (deletionPage) return renderAuth();
   $("#root").innerHTML = '<div class="auth"><p class="note" style="text-align:center">불러오는 중…</p></div>';
   try {
-    [S.profile, S.staff] = await Promise.all([B.getProfile(), B.isStaff()]);
-    S.deepApp = S.profile ? await B.getDeepApp() : null;
-  } catch (e) {
-    console.error(e);
-    $("#root").innerHTML = '<div class="auth"><section class="card"><h2>연결하지 못했어요</h2><p class="small muted">인터넷 연결을 확인한 뒤 다시 열어 주세요.</p><button class="btn block" onclick="location.reload()">다시 시도</button></section></div>';
+    const [profile, staff] = await Promise.all([B.getProfile(), B.isStaff()]);
+    if (S.user?.uid !== u.uid) return;
+    const deepApp = profile ? await B.getDeepApp() : null;
+    if (S.user?.uid !== u.uid) return;
+    Object.assign(S, { profile, staff, deepApp });
+  } catch {
+    if (S.user?.uid === u.uid) connectionError(() => onSignedIn(u));
     return;
   }
   if (S.profile && S.profile.largeText != null && LS.get("large", null) == null) { LS.set("large", !!S.profile.largeText); applyPrefs(); }
   S.role = S.staff ? LS.get("role", S.profile ? "p" : "a") : "p";
   if (!S.profile && S.staff) S.role = "a";
-  unsubs.push(B.watchNotices(r => { S.notices = r; refresh(); }));
+  startNotices();
+  unsubs.push(B.watchInboxReads(keys => { S.reads = new Set(keys); S.inboxError = false; refresh(); }, () => { S.inboxError = true; refresh(); }));
   if (S.profile) startProfileData();
   if (S.role === "a") startStaffData();
   if (S.profile || S.staff) { shell(); render("fwd"); } else render();
@@ -1342,6 +1440,16 @@ function startProfileData() {
       if (before !== null && now > before && S.role === "p") { const l = todayLecture(); celebrate("출석 완료", l ? `${l.n}강 · ${fmtDate(l.date)}` : "출석이 기록됐어요", `${now} / ${LECTURES.length}강`); }
       refresh();
     }));
+    unsubs.push(B.watchDeepDeadline(deadline => {
+      S.deepDeadline = deadline;
+      refresh();
+    }, () => { S.deepDeadline = null; refresh(); }));
+    unsubs.push(B.watchMyDeepApp(app => {
+      const changed = (app?.status === "selected") !== (S.deepApp?.status === "selected");
+      S.deepApp = app;
+      if (changed) startNotices();
+      refresh();
+    }));
     unsubs.push(B.watchMyQuestions(
       r => { S.myQs = r; S.myQuestionsError = false; refresh(); },
       () => { S.myQuestionsError = true; refresh(); }
@@ -1353,20 +1461,61 @@ function startProfileData() {
 function offlineBanner() {
   let b = $("#offline");
   if (navigator.onLine) { b && b.remove(); return; }
-  if (!b) { b = document.createElement("div"); b.id = "offline"; b.className = "offline"; b.textContent = "오프라인 · 연결되면 자동으로 저장돼요"; document.body.appendChild(b); }
+  if (!b) {
+    b = document.createElement("div");
+    b.id = "offline";
+    b.className = "offline";
+    b.setAttribute("role", "status");
+    b.textContent = "오프라인 · 저장하려면 연결 후 다시 시도해 주세요.";
+    document.body.appendChild(b);
+  }
 }
 window.addEventListener("online", offlineBanner); window.addEventListener("offline", offlineBanner);
 
-(async function boot() {
-  B = await createBackend();
-  if (B.mode === "demo" && !B.updateDeepApp) B.updateDeepApp = async d => { const a = await B.getDeepApp(); Object.assign(a, d); };
+function connectionError(retry) {
+  $("#splash")?.remove();
+  $("#root").innerHTML = `<div class="auth"><section class="card"><h2>서버에 연결하지 못했어요</h2>
+    <p class="small muted">인터넷 연결을 확인한 뒤 다시 시도해 주세요.</p>
+    <button class="btn block" id="retryConnection">다시 시도</button></section></div>`;
+  $("#retryConnection").onclick = retry;
+}
+
+async function boot() {
+  $("#root").innerHTML = '<div class="auth"><p class="note" role="status">서버 연결 중…</p></div>';
+  try {
+    B = await createBackend();
+  } catch {
+    connectionError(boot);
+    const runtime = await import("../vendor/runtime.js").catch(() => null);
+    if (runtime?.default.mode === "development" && $("#retryConnection")) {
+      const panel = $("#retryConnection").parentElement;
+      const localAddress = window.Capacitor?.getPlatform?.() === "android" ? "10.0.2.2" : "localhost";
+      panel.insertAdjacentHTML("beforeend", `<p class="small muted">개발용</p><a class="btn ghost block" href="?emulator=${localAddress}">로컬 Firebase 연결</a><a class="btn ghost block" href="?demo=1">이 기기에서 체험</a>`);
+    }
+    return;
+  }
+  void loadQrLibrary().then(lib => { qrGenerator = lib.qrcode; if (S.role === "p" && S.tab.p === "att") refresh(); }).catch(() => {});
   let first = true;
+  const finishSplash = () => {
+    if (!first) return;
+    first = false;
+    setTimeout(() => $("#splash")?.remove(), RM ? 0 : 600);
+  };
   B.onAuth(async u => {
-    stopAll(); stopScanner(); prevAttCount = null;
-    Object.assign(S, { profile: null, staff: false, myAtt: [], notices: [], deepApp: null, myQs: [], users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [], chat: [], scanLecture: null, myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpSending: false, answerDrafts: {}, answerSending: new Set(), helpFilter: "open", helpLimit: 25 });
-    if (u) await onSignedIn(u); else { S.user = null; renderAuth(); }
-    if (first) { first = false; setTimeout(() => { const sp = $("#splash"); sp && sp.remove(); }, RM ? 0 : 1500); }
+    closeSheet(); stopAll(); stopScanner(); prevAttCount = null;
+    Object.assign(S, {
+      user: null, profile: null, staff: false, deepDeadline: null, onlineStatus: "", onlineSending: false,
+      myAtt: [], notices: [], deepApp: null, myQs: [], reads: new Set(), inboxError: false, noticesError: false,
+      users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [], chat: [], scanLecture: null,
+      myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpRequest: null, helpSending: false,
+      answerDrafts: {}, answerErrors: {}, answerSending: new Set(), helpFilter: "open", helpLimit: 25
+    });
+    if (u) await onSignedIn(u); else renderAuth();
+    finishSplash();
   });
   offlineBanner();
-  if ("serviceWorker" in navigator && location.protocol === "https:" && !isNative) navigator.serviceWorker.register("sw.js").catch(() => {});
-})();
+  if ("serviceWorker" in navigator && location.protocol === "https:" && !isNative && B.environment !== "development") {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+}
+void boot();

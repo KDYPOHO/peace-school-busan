@@ -35,8 +35,8 @@ public class AppLaunchTest {
     public void sendsInquiryAndReplyAndKeepsOneCameraPreview() throws InterruptedException {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             openDemo(scenario);
-            assertEventually(scenario, "Local demo login in airplane mode", """
-                !!document.querySelector('#authForm') && document.body.textContent.includes('체험 모드')
+            assertEventually(scenario, "Local demo login with networking disabled", """
+                !navigator.onLine && !!document.querySelector('#authForm') && document.body.textContent.includes('체험 모드')
                 """);
             evaluate(scenario, """
                 (() => {

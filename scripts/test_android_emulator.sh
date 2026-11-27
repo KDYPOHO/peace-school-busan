@@ -27,10 +27,16 @@ trap cleanup EXIT
 timeout 240 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do kill -0 "$emulator_pid" || exit 1; sleep 2; done'
 adb shell input keyevent 82
 adb shell getprop ro.build.version.sdk | tr -d '\r' | grep -Fx "$api"
-adb shell dumpsys webviewupdate | tee "$evidence/webview.txt"
+{
+  adb shell dumpsys webviewupdate
+  if [[ "$api" -eq 24 ]]; then
+    adb shell dumpsys package com.google.android.webview | grep -E 'Package \[|versionName=' || true
+    adb shell dumpsys package com.android.chrome | grep -E 'Package \[|versionName=' || true
+  fi
+} | tee "$evidence/webview.txt"
 if [[ "$api" -eq 24 ]]; then
-  adb shell settings put global airplane_mode_on 1
-  adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true
+  adb shell svc wifi disable
+  adb shell svc data disable
 else
   adb shell cmd connectivity airplane-mode enable
 fi

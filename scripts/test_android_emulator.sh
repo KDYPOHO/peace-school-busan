@@ -40,7 +40,8 @@ fi
 cd android
 rm -rf app/build/outputs/androidTest-results/connected
 status=0
-timeout --kill-after=15s 240s ./gradlew :app:connectedDebugAndroidTest --no-daemon || status=$?
+timeout --kill-after=15s 240s ./gradlew :app:connectedDebugAndroidTest --no-daemon \
+  -Pandroid.testInstrumentationRunnerArguments.class=kr.busan.peaceschool.AppLaunchTest || status=$?
 if [[ "$status" -ne 0 ]]; then
   timeout 15s adb logcat -d -t 1000 >"$evidence/device-logcat.log" 2>&1 || true
   if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then

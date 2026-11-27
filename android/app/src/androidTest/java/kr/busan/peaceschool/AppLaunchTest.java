@@ -177,7 +177,7 @@ public class AppLaunchTest {
             """, role));
     }
 
-    private void assertEventually(ActivityScenario<MainActivity> scenario, String description, String condition)
+    static void assertEventually(ActivityScenario<MainActivity> scenario, String description, String condition)
         throws InterruptedException {
         long deadline = SystemClock.elapsedRealtime() + 30_000;
         do {
@@ -196,7 +196,7 @@ public class AppLaunchTest {
         assertTrue(description + ": " + diagnostics, false);
     }
 
-    private String evaluate(ActivityScenario<MainActivity> scenario, String script)
+    static String evaluate(ActivityScenario<MainActivity> scenario, String script)
         throws InterruptedException {
         CountDownLatch callback = new CountDownLatch(1);
         AtomicReference<String> value = new AtomicReference<>();

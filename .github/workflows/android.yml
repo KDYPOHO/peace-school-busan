@@ -62,6 +62,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: 에뮬레이터용 공통 개발 자산 생성
+        id: emulator_assets
         if: github.ref != 'refs/heads/main'
         run: |
           PSB_BUILD_MODE=development npm run build:web
@@ -70,7 +71,7 @@ jobs:
         if: github.ref != 'refs/heads/main'
         run: bash scripts/test_android_emulator.sh 36
       - name: Android 7.0 에뮬레이터에서 최소 지원 환경 검사
-        if: github.ref != 'refs/heads/main'
+        if: ${{ !cancelled() && steps.emulator_assets.outcome == 'success' }}
         run: bash scripts/test_android_emulator.sh 24
       - uses: actions/upload-artifact@v4
         if: always() && github.ref != 'refs/heads/main'

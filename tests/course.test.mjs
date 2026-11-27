@@ -24,6 +24,22 @@ test('온라인 출석 허용 시각은 KST 기준으로 경계 양쪽을 구분
   assert.equal(onlineOpenAt(lecture, close + 1), false);
 });
 
+test('서버 일정 변경을 한국 시각으로 표시하고 일정 없는 회차의 온라인 출석을 잠근다', async () => {
+  const { scheduledLectures, onlineOpenAt } = await import('../www/js/course.js');
+  const start = Date.parse('2026-11-28T14:00:00+09:00');
+  const end = start + 120 * 60_000;
+  const schedule = { start, end, opensAt: start - 30 * 60_000, closesAt: end + 60 * 60_000 };
+  const lectures = scheduledLectures({ 1: schedule, 2: { ...schedule, closesAt: start - 1 } });
+  const [first, incomplete] = lectures;
+  assert.equal(first.date, '2026-11-28');
+  assert.equal(first.start, '14:00');
+  assert.equal(first.end, '16:00');
+  assert.equal(onlineOpenAt(first, schedule.opensAt - 1), false);
+  assert.equal(onlineOpenAt(first, schedule.opensAt), true);
+  assert.equal(incomplete.schedule, null);
+  assert.equal(onlineOpenAt(incomplete, schedule.opensAt), false);
+});
+
 test('심화 지원 안내는 서버 마감값만 사용한다', () => {
   const question = '심화과정 신청은 언제까지인가요?';
   assert.match(faqAnswer(question, {}).a, /지원 일정을 확인 중/);

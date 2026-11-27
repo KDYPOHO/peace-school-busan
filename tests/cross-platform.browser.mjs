@@ -10,6 +10,7 @@ const project = 'demo-hanbando-school';
 const participant = 'participant@example.invalid';
 const operator = 'operator@example.invalid';
 const password = 'LocalBrowserFixture-132';
+const firestore = `http://127.0.0.1:8182/v1/projects/${project}/databases/(default)/documents`;
 const root = resolve('www');
 const types = {
   '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript',
@@ -42,7 +43,6 @@ async function seedOperator() {
   assert.equal(process.env.FIREBASE_AUTH_EMULATOR_HOST, '127.0.0.1:9182');
   assert.equal(process.env.FIRESTORE_EMULATOR_HOST, '127.0.0.1:8182');
   const auth = 'http://127.0.0.1:9182/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-api-key';
-  const firestore = `http://127.0.0.1:8182/v1/projects/${project}/databases/(default)/documents`;
   const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer owner' };
   const signup = await fetch(auth, { method: 'POST', headers,
     body: JSON.stringify({ email: operator, password, returnSecureToken: true }) });
@@ -51,6 +51,21 @@ async function seedOperator() {
   const staff = await fetch(firestore + '/staff/' + localId, { method: 'PATCH', headers,
     body: JSON.stringify({ fields: { label: { stringValue: '가상 운영진' } } }) });
   assert.ok(staff.ok, `Fixture staff role failed (${staff.status})`);
+}
+
+async function openFixtureLecture() {
+  const minute = 60_000;
+  const start = Date.now() + 15 * minute;
+  const end = start + 120 * minute;
+  const times = { start, end, opensAt: start - 30 * minute, closesAt: end + 60 * minute };
+  const fields = Object.fromEntries(Object.entries(times).map(([key, value]) => [
+    key, { timestampValue: new Date(value).toISOString() }
+  ]));
+  const result = await fetch(firestore + '/courseSchedule/1', {
+    method: 'PATCH', headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields })
+  });
+  assert.ok(result.ok, `Fixture schedule failed (${result.status})`);
 }
 
 async function openPage(browser, device, url, options = {}) {
@@ -183,4 +198,21 @@ test('Chromium과 WebKit에서 참가자 신청, 문의 답변, 읽음 상태를
   await reply(androidStaff.page, secondQuestion, secondAnswer);
   await checkReply(apple.page, android.page, secondQuestion, secondAnswer);
   t.diagnostic('WebKit 참가자와 Chromium 운영진으로 바꿔도 동기화됨');
+
+  const participants = [android.page, apple.page];
+  for (const page of participants) {
+    await page.locator('[data-tab=att]').click();
+    assert.equal(await page.locator('#onlineBtn').isEnabled(), false);
+  }
+  await openFixtureLecture();
+  const buttons = participants.map(page => page.getByRole('button', { name: '온라인 출석하기', exact: true }));
+  await Promise.all(buttons.map(button => button.waitFor()));
+  await Promise.all(buttons.map(button => button.evaluate(el => el.click())));
+  await Promise.all(participants.map(page => page.getByRole('button', { name: '출석 완료', exact: true }).waitFor()));
+  const attendance = await fetch(firestore + '/attendance', { headers: { Authorization: 'Bearer owner' } });
+  assert.ok(attendance.ok);
+  const { documents } = await attendance.json();
+  assert.equal(documents.length, 1);
+  assert.equal(documents[0].fields.method.stringValue, 'online');
+  t.diagnostic('서버에서 연 강의에 두 브라우저로 동시에 출석해도 한 건만 저장됨');
 });

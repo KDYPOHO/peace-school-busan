@@ -1,5 +1,6 @@
-import { DEEP, DEEP_APPLY_UNTIL } from "./config.js";
+import { DEEP, DEEP_APPLY_UNTIL, LECTURES } from "./config.js";
 import { deleteAccountInOrder } from "./account-deletion.js";
+import { lectureWindow } from "./course.js";
 
 const unavailable = () => Object.assign(new Error("Firebase configuration or connection unavailable"), { code: "unavailable" });
 export function newRequestId() {
@@ -150,9 +151,20 @@ async function firebaseBackend(settings, emulator) {
     async getUser(uid) { const s = await read(doc(db, "users", uid)); return s.exists() ? { uid, ...s.data() } : null; },
     async setMemberVerified(uid, v) { await updateDoc(doc(db, "users", uid), { memberVerified: v, verifiedBy: api.user.uid, verifiedAt: ts() }); },
 
-    watchDeepDeadline(cb, onError) {
-      return onSnapshot(doc(db, "courseSchedule", "deep"), snapshot => {
-        cb(snapshot.data()?.closesAt?.toMillis() ?? null);
+    watchCourseSchedule(cb, onError) {
+      return onSnapshot(collection(db, "courseSchedule"), { includeMetadataChanges: true }, snapshot => {
+        if (snapshot.metadata.fromCache) return;
+        const toTime = value => value instanceof F.Timestamp ? value.toMillis() : null;
+        const lectures = {};
+        let deepDeadline = null;
+        snapshot.forEach(record => {
+          const { start, end, opensAt, closesAt } = record.data();
+          if (record.id === "deep") deepDeadline = toTime(closesAt);
+          else if (/^[1-5]$/.test(record.id)) {
+            lectures[record.id] = { start: toTime(start), end: toTime(end), opensAt: toTime(opensAt), closesAt: toTime(closesAt) };
+          }
+        });
+        cb({ lectures, deepDeadline });
       }, onError);
     },
     async getDeepApp() { const s = await read(doc(db, "deepApps", api.user.uid)); return s.exists() ? s.data() : null; },
@@ -302,8 +314,14 @@ function demoBackend() {
     watchDeepApps(cb) { return sub(() => cb(Object.entries(D.deepApps).map(([uid, a]) => ({ uid, ...a })))); },
     async setDeepStatus(uid, status) { D.deepApps[uid].status = status; save(); },
     watchMyDeepApp(cb) { return sub(() => cb(D.deepApps[api.user?.uid] || null)); },
-    watchDeepDeadline(cb) {
-      cb(Date.parse(DEEP_APPLY_UNTIL + "T00:00:00+09:00") + 86_400_000);
+    watchCourseSchedule(cb) {
+      cb({
+        lectures: LECTURES.reduce((windows, lecture) => {
+          windows[lecture.n] = lectureWindow(lecture);
+          return windows;
+        }, {}),
+        deepDeadline: Date.parse(DEEP_APPLY_UNTIL + "T00:00:00+09:00") + 86_400_000
+      });
       return () => {};
     },
     watchNotices({ staff, selected }, cb) { return sub(() => cb(D.notices.filter(n => staff || n.audience !== "deep" || selected).sort((a, b) => b.at - a.at))); },

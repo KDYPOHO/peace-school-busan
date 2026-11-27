@@ -2,7 +2,7 @@ import qrcode from "qrcode-generator";
 // 한반도 평화학교 앱 (참가자 + 운영진)
 import { APP, LECTURES, VENUE, PASS_COUNT, ONSITE_CAP, DEEP, TEAMS, CRITERIA, REGIONS, DEEP_STATUS } from "./config.js";
 import { createBackend, isNative, newRequestId } from "./backend.js";
-import { countedLectures, deepDeadlineLabel, lectureWindow, onlineOpenAt } from "./course.js";
+import { countedLectures, deepDeadlineLabel, lectureWindow, onlineOpenAt, scheduledLectures } from "./course.js";
 import { faqAnswer, FAQ_CHIPS } from "./faq.js";
 import { ORG_ROOT, REGION_COUNCILS, DOMESTIC, OVERSEAS, NONE as ORG_NONE, affiliationLabel, affiliationFull } from "./councils.js";
 const MEMBER_TYPES = ["자문위원", "청년 서포터즈·추천 청년", "일반 청년"];
@@ -68,19 +68,25 @@ const todayStr = () => kstNow().toISOString().slice(0, 10);
 function fmtDate(iso) { const [y, m, d] = iso.split("-").map(Number); const w = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); return `${y}. ${m}. ${d}.(${DOW[w]})`; }
 function fmtTime(ms) { if (!ms) return ""; const d = new Date(ms + 9 * 3600e3); return `${d.getUTCMonth() + 1}. ${d.getUTCDate()}. ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`; }
 function lectureState(l) { const t = todayStr(); return l.date < t ? "past" : l.date === t ? "today" : "future"; }
-const todayLecture = () => LECTURES.find(l => l.date === todayStr());
-const nextLecture = () => LECTURES.find(l => lectureWindow(l).start > Date.now());
-const onlineLecture = () => LECTURES.find(l => onlineOpenAt(l, Date.now()));
-const onlineOpen = l => l && onlineOpenAt(l, Date.now());
-const courseEnded = () => todayStr() >= LECTURES[LECTURES.length - 1].date;
-const remainingFor = attended => LECTURES.filter(l => lectureState(l) !== "past" && !attended.includes(l.n)).length;
+const todayLecture = () => S.lectures.find(l => l.date === todayStr());
+const nextLecture = () => {
+  const now = Date.now();
+  return S.lectures.filter(l => lectureWindow(l).start > now)
+    .sort((a, b) => lectureWindow(a).start - lectureWindow(b).start)[0];
+};
+const onlineLecture = () => S.lectures.find(l => onlineOpenAt(l, Date.now()));
+const onlineOpen = l => onlineOpenAt(l, Date.now());
+const lastCourseLecture = () => S.lectures.reduce((last, next) => lectureWindow(last).end > lectureWindow(next).end ? last : next);
+const courseEnded = () => todayStr() >= lastCourseLecture().date;
+const remainingFor = attended => S.lectures.filter(l => lectureState(l) !== "past" && !attended.includes(l.n)).length;
 
 /* ───────── 상태 ───────── */
-let B, noticeUnsub, noticeEpoch = 0;
+let B, noticeUnsub, noticeEpoch = 0, courseTimer;
 const testLabel = () => B.environment === "staging" ? '<span class="pill p-warn">시험용</span>'
   : B.environment === "development" ? '<span class="pill p-warn">개발용</span>' : "";
 const S = {
   user: null, profile: null, staff: false, role: "p",
+  lectures: scheduledLectures(),
   tab: { p: "home", a: "dash" },
   myAtt: [], notices: [], deepApp: null, myQs: [], reads: new Set(), inboxError: false,
   users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [],
@@ -499,7 +505,7 @@ const VIEWS = {
     const att = myAttended(), c = att.length, need = Math.max(0, PASS_COUNT - c), rem = remainingFor(att);
     const active = onlineLecture();
     const today = todayLecture();
-    const tl = active || (today && lectureWindow(today).close >= Date.now() ? today : null);
+    const tl = active || (today && lectureWindow(today).closesAt >= Date.now() ? today : null);
     const l = tl || nextLecture();
     const online = S.profile.mode === "online";
     const done = l && att.includes(l.n);
@@ -507,10 +513,10 @@ const VIEWS = {
     const reach = c + rem >= PASS_COUNT;
     return `
     <section class="card hero has-coin">${coin()}
-      ${l ? `<div class="eyebrow">${tl ? "오늘" : "다음 강의"} · 기본과정 ${l.n}강${l.tag ? " · " + l.tag : ""}</div>${lectureCard(l)}
+      ${l ? `<div class="eyebrow">${l.date === todayStr() ? "오늘" : active ? "출석 가능" : "다음 강의"} · 기본과정 ${l.n}강${l.tag ? " · " + l.tag : ""}</div>${lectureCard(l)}
       <p class="course-mode">${online ? "온라인 참여" : "현장 참여"} · ${done ? "출석 완료" : tl ? "출석 기록 없음" : "출석 예정"}</p>
       <div class="row wrap home-course-actions">${online
-        ? `<button class="btn" id="homeOnline" ${done || !active || S.onlineSending ? "disabled" : ""}>${done ? "출석 완료" : active ? "온라인 출석" : "온라인 출석 대기"}</button>`
+        ? `<button class="btn" id="homeOnline" ${done || !active || S.onlineSending ? "disabled" : ""}>${done ? "출석 완료" : active ? "온라인 출석" : l.schedule ? "온라인 출석 대기" : "출석 일정 확인 중"}</button>`
         : '<button class="btn" data-go="att">QR 수강증</button>'}
         <button class="btn ghost" data-go="sched">전체 일정</button></div>
       <p id="onlineStatus" class="small" role="status" ${S.onlineStatus ? "" : "hidden"}>${esc(S.onlineStatus || "")}</p>`
@@ -535,9 +541,9 @@ const VIEWS = {
     const att = myAttended();
     return `
     <section class="card">
-      <div class="row between"><h2 style="margin:0">기본과정 ${LECTURES.length}강</h2><span class="small muted">격주 토 14:00 · 회당 2시간</span></div>
+      <div class="row between"><h2 style="margin:0">기본과정 ${LECTURES.length}강</h2><span class="small muted">한국 시간 기준</span></div>
       <p class="small muted" style="margin:4px 0 12px">${esc(VENUE)}</p>
-      <div class="list">${LECTURES.map(l => {
+      <div class="list">${S.lectures.map(l => {
         const st = lectureState(l), a = att.includes(l.n);
         const pill = a ? '<span class="pill p-ok">출석</span>' : st === "past" ? '<span class="pill p-bad">결석</span>' : st === "today" ? '<span class="pill p-warn">오늘</span>' : '<span class="pill p-mute">예정</span>';
         return `<div class="li"><div class="dot ${a ? "done" : st === "today" ? "now" : ""}">${l.n}강</div><div class="body"><div class="k">${esc(l.title)}</div><div class="small muted">${fmtDate(l.date)} ${l.start}~${l.end}${l.tag ? " · " + l.tag : ""}</div></div>${pill}</div>`;
@@ -567,12 +573,12 @@ const VIEWS = {
     <section class="card">
       <h2>온라인으로 듣는 경우</h2>
       <p class="small muted" style="margin:0 0 10px">강의 당일 ${tl ? `${tl.start} 30분 전부터 종료 1시간 뒤까지` : "시작 30분 전부터"} 아래 버튼을 누르면 온라인 출석이 기록돼요. 운영진이 중계 접속 기록과 대조해요.</p>
-      <button class="btn ghost block" id="onlineBtn" ${done || !open || S.onlineSending ? "disabled" : ""}>${done ? "출석 완료" : open ? "온라인 출석하기" : "강의 시간에 열려요"}</button>
+      <button class="btn ghost block" id="onlineBtn" ${done || !open || S.onlineSending ? "disabled" : ""}>${done ? "출석 완료" : open ? "온라인 출석하기" : tl && !tl.schedule ? "출석 일정 확인 중" : "강의 시간에 열려요"}</button>
       <p id="onlineStatus" class="small" role="status" ${S.onlineStatus ? "" : "hidden"}>${esc(S.onlineStatus || "")}</p>
     </section>
     <section class="card">
       <h2>내 출결</h2>
-      <div class="row" style="gap:6px">${LECTURES.map(l => `<div class="dot ${att.includes(l.n) ? "done" : lectureState(l) === "today" ? "now" : ""}" style="flex:1" title="${l.n}강">${l.n}</div>`).join("")}</div>
+      <div class="row" style="gap:6px">${S.lectures.map(l => `<div class="dot ${att.includes(l.n) ? "done" : lectureState(l) === "today" ? "now" : ""}" style="flex:1" title="${l.n}강">${l.n}</div>`).join("")}</div>
       <p class="small muted" style="margin:10px 0 0">${att.length >= PASS_COUNT ? "수료 요건을 채웠어요." : `수료까지 ${PASS_COUNT - att.length}강 남았어요.`}</p>
       <button class="btn ghost block" id="attendanceHelp" type="button">출석 문의하기</button>
     </section>`;
@@ -611,7 +617,7 @@ const VIEWS = {
     </section>
     <section class="card">
       <div class="row between"><h2 style="margin:0">수료증</h2>${issued ? '<span class="pill p-ok">발급 완료</span>' : ok ? '<span class="pill p-ok">발급 예정</span>' : '<span class="pill p-mute">미리보기</span>'}</div>
-      <p class="small muted" style="margin:6px 0 12px">${issued ? "인쇄하거나 PDF로 저장할 수 있어요." : ok ? `수료식(${fmtDate(LECTURES[LECTURES.length - 1].date)}) 날 자동으로 발급돼요.` : `${PASS_COUNT}강 이상 출석하면 이 수료증이 발급돼요.`}</p>
+      <p class="small muted" style="margin:6px 0 12px">${issued ? "인쇄하거나 PDF로 저장할 수 있어요." : ok ? `수료식(${fmtDate(lastCourseLecture().date)}) 날 자동으로 발급돼요.` : `${PASS_COUNT}강 이상 출석하면 이 수료증이 발급돼요.`}</p>
       ${certHtml(p, !issued)}
       ${issued ? '<button class="btn gold block" style="margin-top:12px" id="printBtn">수료증 인쇄 · PDF 저장</button>' : ""}
     </section>
@@ -636,7 +642,7 @@ const VIEWS = {
 
   /* ───────── 운영진 화면 ───────── */
   dash() {
-    const st = stats(), l = todayLecture() || nextLecture() || LECTURES[LECTURES.length - 1];
+    const st = stats(), l = todayLecture() || nextLecture() || lastCourseLecture();
     const lc = S.allAtt.filter(a => a.lecture === l.n);
     return `
     <section class="card hero has-coin">${coin()}
@@ -666,7 +672,7 @@ const VIEWS = {
     </section>
     <section class="card">
       <h2>강별 출석</h2>
-      <div class="list">${LECTURES.map(x => { const k = S.allAtt.filter(a => a.lecture === x.n).length; const pct = st.n ? Math.round(k / st.n * 100) : 0; return `<div class="li"><div class="dot ${lectureState(x) === "past" ? "done" : lectureState(x) === "today" ? "now" : ""}">${x.n}</div><div class="body"><div class="row between small"><span>${fmtDate(x.date)}</span><span class="num">${k}명 · ${pct}%</span></div><div class="bar" style="margin-top:4px"><i style="width:${pct}%"></i></div></div></div>`; }).join("")}</div>
+      <div class="list">${S.lectures.map(x => { const k = S.allAtt.filter(a => a.lecture === x.n).length; const pct = st.n ? Math.round(k / st.n * 100) : 0; return `<div class="li"><div class="dot ${lectureState(x) === "past" ? "done" : lectureState(x) === "today" ? "now" : ""}">${x.n}</div><div class="body"><div class="row between small"><span>${fmtDate(x.date)}</span><span class="num">${k}명 · ${pct}%</span></div><div class="bar" style="margin-top:4px"><i style="width:${pct}%"></i></div></div></div>`; }).join("")}</div>
     </section>
     <section class="card">
       <h2>자료 내보내기</h2>
@@ -699,11 +705,11 @@ const VIEWS = {
     </section>`;
   },
   scan() {
-    const n = S.scanLecture || (todayLecture() || nextLecture() || LECTURES[0]).n;
+    const n = S.scanLecture || (todayLecture() || nextLecture() || S.lectures[0]).n;
     S.scanLecture = n;
     return `
     <section class="card">
-      <div class="row between"><h2 style="margin:0">회차별 출석</h2><select id="scanL" aria-label="강의 선택" style="padding:6px 8px;border-radius:10px;border:1px solid var(--line);background:var(--surface)">${LECTURES.map(l => `<option value="${l.n}" ${l.n === n ? "selected" : ""}>${l.n}강 · ${fmtDate(l.date)}</option>`).join("")}</select></div>
+      <div class="row between"><h2 style="margin:0">회차별 출석</h2><select id="scanL" aria-label="강의 선택" style="padding:6px 8px;border-radius:10px;border:1px solid var(--line);background:var(--surface)">${S.lectures.map(l => `<option value="${l.n}" ${l.n === n ? "selected" : ""}>${l.n}강 · ${fmtDate(l.date)}</option>`).join("")}</select></div>
       <p class="small muted" id="scanLectureTitle"></p>
       <div class="row between" style="margin:10px 0 6px"><span class="num"><b style="font-size:1.4rem" id="scanCount">0</b> / ${ONSITE_CAP}명 현장</span><span class="small muted" id="scanOnline"></span></div>
       <div class="bar"><i id="scanBar" style="width:0%"></i></div>
@@ -837,7 +843,7 @@ function deepForm() {
   };
 }
 function certHtml(p, locked) {
-  const end = LECTURES[LECTURES.length - 1].date.split("-").map(Number);
+  const end = lastCourseLecture().date.split("-").map(Number);
   return `<div class="cert ${locked ? "locked" : ""}">
     <div class="watermark"><img src="img/symbol.png" alt=""></div>
     <div class="no">제 ${APP.year}-부산청년-${esc(String(p.no).replace(/^BS\d+-/, ""))} 호</div>
@@ -905,7 +911,7 @@ function ask(q) {
 function stats() {
   const n = S.users.length;
   const regions = new Set(S.users.map(u => u.region).filter(Boolean)).size;
-  const past = LECTURES.filter(l => lectureState(l) !== "future");
+  const past = S.lectures.filter(l => lectureState(l) !== "future");
   const rate = n && past.length ? Math.round(past.reduce((s, l) => s + S.allAtt.filter(a => a.lecture === l.n).length, 0) / (past.length * n) * 100) : 0;
   const per = S.users.map(u => { const att = attOf(u.uid); return { u, att, rem: remainingFor(att) }; });
   return {
@@ -956,7 +962,7 @@ function reportDraft() {
  - 참가 구분: ${byType}
 
 2. 출결 현황
-${LECTURES.map(l => { const k = S.allAtt.filter(a => a.lecture === l.n); return ` - ${l.n}강 ${fmtDate(l.date)} 「${l.title}」: ${k.length}명 (현장 ${k.filter(a => a.method !== "online").length}, 온라인 ${k.filter(a => a.method === "online").length})`; }).join("\n")}
+${S.lectures.map(l => { const k = S.allAtt.filter(a => a.lecture === l.n); return ` - ${l.n}강 ${fmtDate(l.date)} 「${l.title}」: ${k.length}명 (현장 ${k.filter(a => a.method !== "online").length}, 온라인 ${k.filter(a => a.method === "online").length})`; }).join("\n")}
  - 지난 강의 평균 출석률: ${st.rate}%
 
 3. 수료
@@ -1118,7 +1124,12 @@ const PARTIAL = {
     const n = S.scanLecture, list = S.allAtt.filter(a => a.lecture === n);
     const on = list.filter(a => a.method !== "online").length;
     const c = $("#scanCount"); if (!c) return;
-    $("#scanLectureTitle").textContent = LECTURES.find(l => l.n === n)?.title || "";
+    $("#scanLectureTitle").textContent = S.lectures.find(l => l.n === n)?.title || "";
+    Array.from($("#scanL").options).forEach((option, index) => {
+      const lecture = S.lectures[index];
+      const label = `${lecture.n}강 · ${fmtDate(lecture.date)}`;
+      if (option.textContent !== label) option.textContent = label;
+    });
     c.textContent = on; $("#scanBar").style.width = Math.min(100, on / ONSITE_CAP * 100) + "%";
     $("#scanOnline").textContent = `온라인 ${list.length - on}명 별도`;
     const rc = $("#recent");
@@ -1141,8 +1152,10 @@ function bindOnline(button) {
     try {
       const result = await B.checkInOnline(l.n);
       if (S.user?.uid === uid) S.onlineStatus = result?.duplicate ? "이미 출석이 기록됐어요." : "출석 저장 완료";
-    } catch {
-      if (S.user?.uid === uid) S.onlineStatus = "저장하지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.";
+    } catch (error) {
+      if (S.user?.uid === uid) S.onlineStatus = error.code === "permission-denied"
+        ? "서버에서 온라인 출석을 허용하지 않았어요. 강의 일정과 기기의 날짜·시간을 확인해 주세요."
+        : "저장하지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.";
     } finally {
       if (S.user?.uid === uid) { S.onlineSending = false; refresh(); }
     }
@@ -1364,6 +1377,7 @@ const BIND = {
 
 /* ───────── 데이터 구독 ───────── */
 function stopAll() {
+  clearTimeout(courseTimer);
   S._profSubs = false;
   noticeEpoch++;
   noticeUnsub?.();
@@ -1373,6 +1387,22 @@ function stopAll() {
   unsubs = [];
   staffUnsubs = [];
 }
+function refreshCourse() {
+  clearTimeout(courseTimer);
+  if (!S.user || document.hidden) return;
+  if ((S.profile && S.role === "p" && ["home", "sched", "att", "me"].includes(S.tab.p))
+      || (S.role === "a" && ["dash", "scan"].includes(S.tab.a))) refresh();
+  const now = Date.now();
+  const nextMidnight = Date.parse(`${todayStr()}T00:00:00+09:00`) + 86_400_000;
+  const boundaries = S.lectures.reduce((times, lecture) => {
+    const { start, opensAt, closesAt } = lectureWindow(lecture);
+    times.push(start, opensAt, closesAt + 1);
+    return times;
+  }, [nextMidnight]);
+  courseTimer = setTimeout(refreshCourse, Math.min(...boundaries.filter(time => time > now)) - now);
+}
+document.addEventListener("visibilitychange", refreshCourse);
+
 function startNotices() {
   noticeUnsub?.();
   const epoch = ++noticeEpoch;
@@ -1429,6 +1459,13 @@ async function onSignedIn(u) {
   if (S.profile && S.profile.largeText != null && LS.get("large", null) == null) { LS.set("large", !!S.profile.largeText); applyPrefs(); }
   S.role = S.staff ? LS.get("role", S.profile ? "p" : "a") : "p";
   if (!S.profile && S.staff) S.role = "a";
+  const updateCourse = ({ lectures, deepDeadline }) => {
+    if (S.user?.uid !== u.uid) return;
+    S.lectures = scheduledLectures(lectures);
+    S.deepDeadline = deepDeadline;
+    refreshCourse();
+  };
+  unsubs.push(B.watchCourseSchedule(updateCourse, () => updateCourse({ lectures: {}, deepDeadline: null })));
   startNotices();
   unsubs.push(B.watchInboxReads(keys => { S.reads = new Set(keys); S.inboxError = false; refresh(); }, () => { S.inboxError = true; refresh(); }));
   if (S.profile) startProfileData();
@@ -1444,10 +1481,6 @@ function startProfileData() {
       if (before !== null && now > before && S.role === "p") { const l = todayLecture(); celebrate("출석 완료", l ? `${l.n}강 · ${fmtDate(l.date)}` : "출석이 기록됐어요", `${now} / ${LECTURES.length}강`); }
       refresh();
     }));
-    unsubs.push(B.watchDeepDeadline(deadline => {
-      S.deepDeadline = deadline;
-      refresh();
-    }, () => { S.deepDeadline = null; refresh(); }));
     unsubs.push(B.watchMyDeepApp(app => {
       const changed = (app?.status === "selected") !== (S.deepApp?.status === "selected");
       S.deepApp = app;
@@ -1507,7 +1540,7 @@ async function boot() {
   B.onAuth(async u => {
     closeSheet(); stopAll(); stopScanner(); prevAttCount = null;
     Object.assign(S, {
-      user: null, profile: null, staff: false, deepDeadline: null, onlineStatus: "", onlineSending: false,
+      user: null, profile: null, staff: false, lectures: scheduledLectures(), deepDeadline: null, onlineStatus: "", onlineSending: false,
       myAtt: [], notices: [], deepApp: null, myQs: [], reads: new Set(), inboxError: false, noticesError: false,
       users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [], chat: [], scanLecture: null,
       myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpRequest: null, helpSending: false,

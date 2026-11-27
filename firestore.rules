@@ -1,6 +1,6 @@
 rules_version = '2';
 // 부산 청년 평화학교 앱 보안 규칙
-// - 참가자: 본인 신청서·출결·심화 지원서만 읽고 쓸 수 있음
+// - 운영진 가입 승인 후 참가자 기능 사용
 // - 운영진(staff 컬렉션에 등록된 계정): 전체 조회, 출석 처리, 공지, 심사, 선발
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -10,6 +10,9 @@ service cloud.firestore {
     function isStaff() {
       return signedIn() && exists(/databases/$(database)/documents/staff/$(me()));
     }
+    function isApproved(uid) {
+      return exists(/databases/$(database)/documents/signupApprovals/$(uid));
+    }
     function onlyChanges(keys) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
@@ -17,7 +20,20 @@ service cloud.firestore {
     // 운영진 명단 (문서 ID = 운영진 uid)
     match /staff/{uid} {
       allow read: if signedIn() && (uid == me() || isStaff());
-      allow write: if isStaff();
+      allow create, update: if isStaff() && isApproved(uid);
+      allow delete: if isStaff();
+    }
+
+    // 가입 승인 기록은 운영진만 작성할 수 있음
+    match /signupApprovals/{uid} {
+      allow read: if signedIn() && (uid == me() || isStaff());
+      allow create: if isStaff()
+        && exists(/databases/$(database)/documents/users/$(uid))
+        && request.resource.data.keys().hasOnly(['by', 'at'])
+        && request.resource.data.by == me()
+        && request.resource.data.at == request.time;
+      allow delete: if signedIn() && (uid == me() || isStaff())
+        && !existsAfter(/databases/$(database)/documents/users/$(uid));
     }
 
     // 참가자 신청서 / 프로필 (문서 ID = 본인 uid)
@@ -31,21 +47,22 @@ service cloud.firestore {
         // 자문위원 인증은 운영진만: 본인은 '인증 대기'까지만 쓸 수 있음
         && request.resource.data.get('memberVerified', '') in ['', 'pending'];
       allow update: if isStaff()
-        || (signedIn() && uid == me()
+        || (signedIn() && uid == me() && isApproved(uid)
             && onlyChanges(['name', 'org', 'region', 'phone', 'mode', 'birthYear', 'updatedAt', 'largeText', 'optionalConsent', 'photoConsent', 'privacyVersion', 'termsVersion', 'orgRegion', 'orgCouncil', 'memberType', 'memberTerm', 'memberNo', 'memberVerified'])
             && (request.resource.data.get('memberVerified', '') == resource.data.get('memberVerified', '')
                 || request.resource.data.get('memberVerified', '') in ['', 'pending']));
-      allow delete: if isStaff() || (signedIn() && uid == me());
+      allow delete: if (isStaff() || (signedIn() && uid == me()))
+        && !existsAfter(/databases/$(database)/documents/signupApprovals/$(uid));
     }
 
     // 출결 (문서 ID = "{강}_{uid}")
     match /attendance/{id} {
+      // 기존 본인 기록은 승인 대기 중에도 탈퇴 시 찾아서 파기할 수 있음
       allow read: if isStaff() || (signedIn() && resource.data.uid == me());
-      allow create: if isStaff()
-        || (signedIn()
-            && request.resource.data.uid == me()
-            && request.resource.data.method == 'online'
-            && id == string(request.resource.data.lecture) + '_' + me());
+      allow create: if signedIn() && isApproved(request.resource.data.uid)
+        && (isStaff() || (request.resource.data.uid == me()
+              && request.resource.data.method == 'online'
+              && id == string(request.resource.data.lecture) + '_' + me()));
       allow update: if isStaff();
       // 탈퇴 시 본인 출결 파기 (개인정보 보호법 제21조)
       allow delete: if isStaff() || (signedIn() && resource.data.uid == me());
@@ -53,23 +70,24 @@ service cloud.firestore {
 
     // 심화과정 지원서 (문서 ID = 본인 uid)
     match /deepApps/{uid} {
-      allow read: if isStaff() || (signedIn() && uid == me());
-      allow create: if signedIn() && uid == me() && request.resource.data.status == 'submitted';
+      allow read: if isStaff() || (signedIn() && uid == me() && isApproved(uid));
+      allow create: if signedIn() && uid == me() && isApproved(uid) && request.resource.data.status == 'submitted';
       allow update: if isStaff()
-        || (signedIn() && uid == me() && onlyChanges(['essay', 'arrival', 'updatedAt']));
+        || (signedIn() && uid == me() && isApproved(uid) && onlyChanges(['essay', 'arrival', 'updatedAt']));
       allow delete: if isStaff() || (signedIn() && uid == me());
     }
 
-    // 공지 (모든 로그인 사용자 읽기, 운영진 쓰기)
+    // 공지 (승인된 참가자와 운영진만 읽기)
     match /notices/{id} {
-      allow read: if signedIn();
+      allow read: if signedIn() && (isStaff() || isApproved(me()));
       allow write: if isStaff();
     }
 
     // 학습 도우미가 답하지 못한 질문 → 운영진 문의함
     match /questions/{id} {
-      allow create: if signedIn() && request.resource.data.uid == me()
+      allow create: if signedIn() && isApproved(me()) && request.resource.data.uid == me()
         && request.resource.data.text is string && request.resource.data.text.size() <= 500;
+      // 탈퇴 시 본인 문의만 찾아서 파기
       allow read: if isStaff() || (signedIn() && resource.data.uid == me());
       allow update: if isStaff();
       allow delete: if isStaff() || (signedIn() && resource.data.uid == me());

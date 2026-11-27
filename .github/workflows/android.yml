@@ -2,9 +2,9 @@ name: 안드로이드 앱 빌드 (APK)
 on:
   push:
     branches: [main]
-    paths: ["www/**", "android/**", "capacitor.config.json", "package.json", ".github/workflows/android.yml"]
+    paths: ["www/**", "android/**", "capacitor.config.json", "package*.json", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["www/**", "android/**", "capacitor.config.json", "package.json", ".github/workflows/android.yml"]
+    paths: ["www/**", "android/**", "capacitor.config.json", "package*.json", ".github/workflows/android.yml"]
   workflow_dispatch:
 permissions:
   contents: write

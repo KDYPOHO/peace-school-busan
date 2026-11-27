@@ -76,15 +76,16 @@ const remainingFor = attended => LECTURES.filter(l => lectureState(l) !== "past"
 /* ───────── 상태 ───────── */
 let B;
 const S = {
-  user: null, profile: null, staff: false, role: "p",
+  user: null, profile: null, staff: false, approved: false, role: "p",
   tab: { p: "home", a: "dash" },
-  myAtt: [], notices: [], deepApp: null, myQs: [],
-  users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [],
+  myAtt: [], notices: [], deepApp: null, deepAppLoad: "loading", myQs: [],
+  users: [], approvals: null, allAtt: [], deepApps: [], questions: [], scores: [], staffList: [],
   judge: { round: "예선", team: 0 }, scanLecture: null, chat: [], authMode: "login", onboardStep: 0, draft: {}
 };
 let unsubs = [], staffUnsubs = [];
 const myAttended = () => [...new Set(S.myAtt.map(a => a.lecture))].sort();
 const attOf = uid => [...new Set(S.allAtt.filter(a => a.uid === uid).map(a => a.lecture))].sort();
+const awaitingSignup = u => S.approvals !== null && !S.approvals.has(u.uid);
 
 /* ───────── 표시 설정 ───────── */
 function applyPrefs() {
@@ -122,6 +123,7 @@ function shell() {
 }
 function setRole(r) {
   if (S.role === r) return;
+  if (!S.staff || (r === "p" && S.profile && !S.approved)) return;
   if (S.role === "a") stopScanner();
   S.role = r; LS.set("role", r);
   if (r === "a") startStaffData();
@@ -129,9 +131,9 @@ function setRole(r) {
 }
 function render(anim) {
   if (!S.user) return renderAuth();
-  if (!S.profile && !S.staff) return renderOnboard();
+  if (!S.staff && !S.approved) return S.profile ? renderApprovalWait() : renderOnboard();
   if (!$("#view")) shell();
-  $("#seg").hidden = !S.staff;
+  $("#seg").hidden = !S.staff || (!!S.profile && !S.approved);
   const to = $("#topOrg"); if (to) to.textContent = S.profile ? affiliationFull(S.profile) : ORG_ROOT;
   $("#seg").classList.toggle("a", S.role === "a");
   $("#roleP").setAttribute("aria-pressed", S.role === "p");
@@ -255,7 +257,7 @@ function renderAuth() {
     <div class="logo"><div class="tile"><img src="img/symbol.png" alt="민주평통 심벌"></div><b>${esc(APP.name)}</b><span>${esc(ORG_ROOT)}</span></div>
     <section class="card">
       <h2 style="margin:0 0 4px">${signup ? "회원가입" : "로그인"}</h2>
-      <p class="small muted" style="margin:0 0 12px">${signup ? "이메일과 비밀번호로 계정을 만든 뒤 수강 신청서를 작성해요." : "수강 신청, QR 출석, 수료증을 앱 하나로 관리해요."}</p>
+      <p class="small muted" style="margin:0 0 12px">${signup ? "계정을 만들고 신청서를 제출하면 운영진이 확인해요. 승인 후 앱을 이용할 수 있어요." : "수강 신청, QR 출석, 수료증을 앱 하나로 관리해요."}</p>
       <form class="form" id="authForm" novalidate>
         <label class="f">이메일<input type="email" id="aEmail" autocomplete="email" inputmode="email" required></label>
         <label class="f">비밀번호${signup ? " (6자 이상)" : ""}<input type="password" id="aPw" autocomplete="${signup ? "new-password" : "current-password"}" minlength="6" required></label>
@@ -269,12 +271,14 @@ function renderAuth() {
         ${signup ? "" : '<button class="btn ghost mini" id="rsBtn">비밀번호 찾기</button>'}
       </div>
     </section>
-    ${B.mode === "demo" ? '<p class="note">체험 모드: 이 기기에만 저장돼요. 아무 이메일로나 들어가 볼 수 있어요.</p>' : ""}
+    ${B.mode === "demo" ? '<p class="note">체험 모드 · 이 기기에만 저장돼요. <button class="btn ghost mini" id="demoStaff">운영진 체험</button></p>' : ""}
     <p class="note"><button class="btn ghost mini" id="pvBtn"><b>개인정보 처리방침</b></button> <button class="btn ghost mini" id="tmBtn">이용약관</button> <button class="btn ghost mini" id="pmBtn">앱 접근권한</button></p>
   </div>`;
   const err = m => ($("#aErr").textContent = m || "");
   $("#swBtn").onclick = () => { S.authMode = signup ? "login" : "signup"; renderAuth(); };
   $("#pvBtn").onclick = privacySheet; $("#tmBtn").onclick = termsSheet; $("#pmBtn").onclick = permSheet;
+  const ds = $("#demoStaff");
+  if (ds) ds.onclick = () => B.signInDemoStaff();
   const rs = $("#rsBtn");
   rs && (rs.onclick = async () => {
     const em = $("#aEmail").value.trim();
@@ -300,14 +304,52 @@ function privacySheet() { legalSheet(privacyHtml()); }
 function termsSheet() { legalSheet(termsHtml()); }
 function permSheet() { legalSheet(`<h1>앱 접근권한 안내</h1>${permissionsHtml()}`); }
 
+function renderApprovalWait() {
+  $("#root").innerHTML = `<div class="auth">
+    <div class="logo"><div class="tile"><img src="img/symbol.png" alt=""></div><b>${esc(APP.name)}</b><span>${esc(ORG_ROOT)}</span></div>
+    <section class="card">
+      <h2 style="margin:0 0 8px">가입 승인 대기</h2>
+      <p class="small muted" style="margin:0 0 12px">신청서를 접수했어요. 운영진이 확인하고 승인하면 앱을 이용할 수 있어요.</p>
+      <dl class="kv" style="margin-bottom:12px"><dt>이메일</dt><dd style="overflow-wrap:anywhere">${esc(S.user.email)}</dd></dl>
+      <button class="btn block" id="approvalRefresh">승인 상태 확인</button>
+      <div class="row wrap" style="gap:8px;margin-top:8px">
+        <button class="btn ghost mini" id="waitOut">로그아웃</button>
+        <button class="btn ghost mini" id="waitDelete" style="color:var(--bad)">회원 탈퇴</button>
+        <button class="btn ghost mini" id="waitPrivacy">개인정보 처리방침</button>
+      </div>
+    </section>
+  </div>`;
+  $("#approvalRefresh").onclick = async e => {
+    const btn = e.currentTarget, u = S.user;
+    btn.disabled = true;
+    btn.textContent = "확인 중…";
+    try {
+      await loadAccount(u);
+      if (S.user === u && !S.approved && !S.staff && S.profile) toast("운영진의 확인을 기다리고 있어요.");
+    } catch (e) {
+      if (S.user === u) toast("승인 상태를 확인하지 못했어요. 인터넷 연결을 확인해 주세요.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "승인 상태 확인";
+    }
+  };
+  $("#waitOut").onclick = () => B.signOut();
+  $("#waitDelete").onclick = withdrawAccount;
+  $("#waitPrivacy").onclick = privacySheet;
+}
+
 /* ───────── 수강 신청 (3단계) ───────── */
 function renderOnboard() {
   $("#root").innerHTML = `<div class="auth" style="justify-content:flex-start">
-    <div class="logo"><div class="tile"><img src="img/symbol.png" alt=""></div><b>수강 신청</b><span>${esc(APP.year)} ${esc(APP.name)} 기본과정</span></div>
+    <div class="logo"><div class="tile"><img src="img/symbol.png" alt=""></div><b>가입 승인 신청</b><span>${esc(APP.year)} ${esc(APP.name)} 기본과정</span></div>
     <div id="view" style="display:flex;flex-direction:column;gap:14px">${onboardCard()}</div>
-    <button class="btn ghost mini" id="obOut" style="align-self:center">다른 계정으로 로그인</button>
+    <div class="row wrap" style="justify-content:center;gap:8px">
+      <button class="btn ghost mini" id="obOut">로그아웃</button>
+      <button class="btn ghost mini" id="obDelete" style="color:var(--bad)">회원 탈퇴</button>
+    </div>
   </div>`;
   $("#obOut").onclick = () => B.signOut();
+  $("#obDelete").onclick = withdrawAccount;
   bindOnboard();
 }
 function onboardCard() {
@@ -378,14 +420,19 @@ function bindOnboard() {
     } else {
       if (!$("#oT").checked || !$("#oC1").checked || !$("#oC2").checked) return err("[필수] 항목 세 가지에 동의해 주세요.");
       d.photo = $("#oC3").checked; d.opt = $("#oC4").checked;
-      const btn = $("#oNext"); btn.disabled = true; btn.textContent = "신청 중…";
+      const btn = $("#oNext"), u = S.user;
+      btn.disabled = true; btn.textContent = "신청 중…";
       try {
-        S.profile = await B.createProfile({ name: d.name, birthYear: +d.birthYear, phone: d.opt ? d.phone : "", region: d.region, orgRegion: d.orgRegion, orgCouncil: d.orgRegion === ORG_NONE ? "" : d.orgCouncil, memberType: d.memberType, memberVerified: d.memberType === "자문위원" ? "pending" : "", memberTerm: d.memberType === "자문위원" ? d.memberTerm : "", memberNo: d.memberType === "자문위원" ? d.memberNo : "", org: d.opt ? d.org : "", mode: d.mode, optionalConsent: d.opt, photoConsent: d.photo, termsAgreed: true, privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion });
-        if (!d.opt && (d.phone || d.org)) setTimeout(() => toast("선택 동의를 하지 않아 휴대폰 번호와 소속은 저장하지 않았어요", 3600), 2800);
-        S.draft = {}; S.onboardStep = 0; S.role = "p";
-        shell(); startProfileData(); render("fwd");
-        celebrate("수강 신청 완료", `수강번호 ${S.profile.no}`, "환영해요");
-      } catch (e2) { console.error(e2); err("신청서를 저장하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요."); btn.disabled = false; btn.textContent = "신청 완료"; }
+        await B.createProfile({ name: d.name, birthYear: +d.birthYear, phone: d.opt ? d.phone : "", region: d.region, orgRegion: d.orgRegion, orgCouncil: d.orgRegion === ORG_NONE ? "" : d.orgCouncil, memberType: d.memberType, memberVerified: d.memberType === "자문위원" ? "pending" : "", memberTerm: d.memberType === "자문위원" ? d.memberTerm : "", memberNo: d.memberType === "자문위원" ? d.memberNo : "", org: d.opt ? d.org : "", mode: d.mode, optionalConsent: d.opt, photoConsent: d.photo, termsAgreed: true, privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion });
+        if (S.user !== u) return;
+        S.draft = {}; S.onboardStep = 0;
+        await onSignedIn(u);
+        if (S.user === u && !d.opt && (d.phone || d.org)) toast("선택 동의를 하지 않아 휴대폰 번호와 소속은 저장하지 않았어요", 3600);
+      } catch (e2) {
+        if (S.user !== u || !btn.isConnected) return;
+        console.error(e2); err("신청서를 저장하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.");
+        btn.disabled = false; btn.textContent = "신청 완료";
+      }
       return;
     }
     S.onboardStep++; redraw();
@@ -529,6 +576,7 @@ const VIEWS = {
   dash() {
     const st = stats(), l = todayLecture() || nextLecture() || LECTURES[LECTURES.length - 1];
     const lc = S.allAtt.filter(a => a.lecture === l.n);
+    const pendingSignups = S.users.filter(awaitingSignup).length;
     return `
     <section class="card hero has-coin">${coin()}
       <div class="eyebrow">운영 현황 · ${fmtDate(todayStr())}</div>
@@ -541,6 +589,9 @@ const VIEWS = {
       <div class="stat"><b data-count="${st.passed}">${st.passed}</b><span>수료 요건 충족</span></div>
       <div class="stat"><b data-count="${S.deepApps.length}">${S.deepApps.length}</b><span>심화 지원 / 정원 ${DEEP.cap}</span></div>
     </div>
+    ${pendingSignups ? `<section class="card">
+      <div class="row between"><h2 style="margin:0">가입 승인 대기 ${pendingSignups}명</h2><button class="btn mini" id="reviewSignups">신청서 확인</button></div>
+    </section>` : ""}
     <section class="card">
       <div class="row between"><h2 style="margin:0">주의가 필요한 참가자</h2><span class="pill p-warn">자동 계산</span></div>
       <p class="small muted" style="margin:4px 0 10px">남은 강의를 모두 들어야 수료할 수 있는 참가자 <b>${st.risk.length}</b>명, 이미 수료가 어려운 참가자 <b>${st.lost.length}</b>명</p>
@@ -563,14 +614,15 @@ const VIEWS = {
     <section class="card">
       <div class="row between"><h2 style="margin:0">운영진</h2><span class="small muted">${S.staffList.length}명</span></div>
       <div class="list small" style="margin-top:8px">${S.staffList.map(s => { const u = S.users.find(x => x.uid === s.id); return `<div class="li"><div class="body"><div class="k">${esc(s.label || (u && u.name) || "운영진")}</div><div class="muted" style="font-size:.72rem;overflow-wrap:anywhere">${esc(s.id)}</div></div>${s.id !== S.user.uid ? `<button class="btn ghost mini" data-unstaff="${esc(s.id)}">해제</button>` : '<span class="pill p-mute">나</span>'}</div>`; }).join("")}</div>
-      <p class="small muted" style="margin:10px 0 0">새 운영진은 그 사람이 앱에 먼저 가입한 뒤, 참가자 탭에서 이름을 눌러 지정해요. 가입서를 안 쓴 사람은 내 정보의 계정 ID로 추가해요.</p>
+      <p class="small muted" style="margin:10px 0 0">가입이 승인된 계정만 새 운영진으로 지정할 수 있어요.</p>
       <form class="composer" id="staffForm" style="margin-top:8px"><input id="staffUid" placeholder="계정 ID 붙여넣기" aria-label="운영진 계정 ID"><button class="btn" type="submit">추가</button></form>
+      <button class="btn ghost mini" id="staffOut" style="margin-top:8px">로그아웃</button>
     </section>`;
   },
   people() {
     const q = (S.peopleQ || "").trim(), f = S.peopleF || "all";
     const rows = S.users.map(u => ({ ...u, att: attOf(u.uid) })).map(u => ({ ...u, rem: remainingFor(u.att) }))
-      .filter(u => f === "all" || (f === "pass" && u.att.length >= PASS_COUNT) || (f === "risk" && u.att.length < PASS_COUNT && u.att.length + u.rem >= PASS_COUNT && u.att.length + u.rem - PASS_COUNT <= 0) || (f === "lost" && u.att.length + u.rem < PASS_COUNT) || (f === "online" && u.mode === "online") || (f === "verify" && isPendingMember(u)))
+      .filter(u => f === "all" || (f === "signup" && awaitingSignup(u)) || (f === "pass" && u.att.length >= PASS_COUNT) || (f === "risk" && !awaitingSignup(u) && u.att.length < PASS_COUNT && u.att.length + u.rem === PASS_COUNT) || (f === "lost" && !awaitingSignup(u) && u.att.length + u.rem < PASS_COUNT) || (f === "online" && u.mode === "online") || (f === "verify" && isPendingMember(u)))
       .filter(u => !S.peopleC || orgKey(u) === S.peopleC)
       .filter(u => !q || [u.name, u.no, u.org, u.region, u.email, affiliationLabel(u)].some(x => String(x || "").toLowerCase().includes(q.toLowerCase())))
       .sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"));
@@ -579,10 +631,10 @@ const VIEWS = {
       <div class="row between"><h2 style="margin:0">참가자</h2><span class="small muted num">${rows.length} / ${S.users.length}명</span></div>
       <input class="search" id="pq" style="margin-top:10px" placeholder="이름, 수강번호, 소속, 지역 검색" value="${esc(q)}" aria-label="참가자 검색">
       <select id="pc" class="search" style="margin-top:8px" aria-label="소속 지역회의로 거르기"><option value="">모든 소속</option>${[...DOMESTIC, ...OVERSEAS, ORG_NONE].map(r => { const k = S.users.filter(u => orgKey(u) === r).length; return k || S.peopleC === r ? `<option value="${esc(r)}" ${S.peopleC === r ? "selected" : ""}>${r === ORG_NONE ? r : r + "지역회의"} (${k})</option>` : ""; }).join("")}</select>
-      <div class="chips" style="margin-top:10px">${[["all", "전체"], ["pass", "수료 요건 충족"], ["risk", "수료 위험"], ["lost", "수료 불가"], ["online", "온라인"], ["verify", `자문위원 인증 대기 ${S.users.filter(isPendingMember).length}`]].map(([k, l]) => `<button class="chip" data-pf="${k}" aria-pressed="${f === k}">${l}</button>`).join("")}</div>
+      <div class="chips" style="margin-top:10px">${[["all", "전체"], ["signup", `가입 승인 대기 ${S.users.filter(awaitingSignup).length}`], ["pass", "수료 요건 충족"], ["risk", "수료 위험"], ["lost", "수료 불가"], ["online", "온라인"], ["verify", `자문위원 인증 대기 ${S.users.filter(isPendingMember).length}`]].map(([k, l]) => `<button class="chip" data-pf="${k}" aria-pressed="${f === k}">${l}</button>`).join("")}</div>
     </section>
     <section class="card" style="padding-top:6px">
-      <div class="list" id="pList">${rows.length ? rows.slice(0, 300).map(u => `<button class="li" data-user="${esc(u.uid)}" style="width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0;cursor:pointer"><div class="body"><div class="k">${esc(u.name)} <span class="small muted" style="font-weight:400">${esc(affiliationLabel(u))}${u.org ? " · " + esc(u.org) : ""}</span></div><div class="small muted">${esc(u.no)} · ${esc(memberLabel(u))} · ${u.mode === "online" ? "온라인" : "현장"}${S.staffList.some(s => s.id === u.uid) ? " · 운영진" : ""}</div></div><span class="pill ${u.att.length >= PASS_COUNT ? "p-ok" : u.att.length + u.rem < PASS_COUNT ? "p-bad" : "p-mute"} num">${u.att.length}/${LECTURES.length}</span></button>`).join("") : '<p class="small muted">조건에 맞는 참가자가 없어요.</p>'}</div>
+      <div class="list" id="pList">${rows.length ? rows.slice(0, 300).map(u => `<button class="li" data-user="${esc(u.uid)}" style="width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0;cursor:pointer"><div class="body"><div class="k">${esc(u.name)} <span class="small muted" style="font-weight:400">${esc(affiliationLabel(u))}${u.org ? " · " + esc(u.org) : ""}</span></div><div class="small muted">${esc(u.no)} · ${esc(memberLabel(u))} · ${u.mode === "online" ? "온라인" : "현장"}${S.staffList.some(s => s.id === u.uid) ? " · 운영진" : ""}</div></div>${awaitingSignup(u) ? '<span class="pill p-warn">승인 대기</span>' : `<span class="pill ${u.att.length >= PASS_COUNT ? "p-ok" : u.att.length + u.rem < PASS_COUNT ? "p-bad" : "p-mute"} num">${u.att.length}/${LECTURES.length}</span>`}</button>`).join("") : '<p class="small muted">조건에 맞는 참가자가 없어요.</p>'}</div>
     </section>`;
   },
   scan() {
@@ -672,7 +724,9 @@ const VIEWS = {
 function deepCard() {
   const att = myAttended(), elig = att.length >= PASS_COUNT, closed = todayStr() > DEEP_APPLY_UNTIL, a = S.deepApp;
   let action;
-  if (a) action = `<div class="row between"><span class="pill ${a.status === "selected" ? "p-ok" : a.status === "rejected" ? "p-bad" : a.status === "waitlist" ? "p-warn" : "p-mute"}">${DEEP_STATUS[a.status] || "검토 중"}</span>${a.status === "submitted" && !closed ? '<button class="btn ghost mini" id="editDeep">지원서 고치기</button>' : ""}</div>${a.status === "selected" ? '<p class="small" style="margin:8px 0 0">축하해요! 세부 일정과 준비물은 공지로 안내해 드려요.</p>' : ""}`;
+  if (S.deepAppLoad === "loading") action = '<p class="small muted" role="status">지원 상태를 불러오는 중이에요.</p>';
+  else if (S.deepAppLoad === "error") action = '<button class="btn ghost mini" id="deepRetry">지원 상태 다시 확인</button>';
+  else if (a) action = `<div class="row between"><span class="pill ${a.status === "selected" ? "p-ok" : a.status === "rejected" ? "p-bad" : a.status === "waitlist" ? "p-warn" : "p-mute"}">${DEEP_STATUS[a.status] || "검토 중"}</span>${a.status === "submitted" && !closed ? '<button class="btn ghost mini" id="editDeep">지원서 고치기</button>' : ""}</div>${a.status === "selected" ? '<p class="small" style="margin:8px 0 0">축하해요! 세부 일정과 준비물은 공지로 안내해 드려요.</p>' : ""}`;
   else if (closed) action = '<button class="btn block" disabled>지원이 마감됐어요</button>';
   else if (elig) action = '<button class="btn gold block" id="applyBtn">심화과정 지원하기</button>';
   else action = `<button class="btn block" disabled>${PASS_COUNT}강 출석 후 지원 가능</button>`;
@@ -781,8 +835,8 @@ function stats() {
   return {
     n, regions, rate,
     passed: per.filter(x => x.att.length >= PASS_COUNT).length,
-    risk: per.filter(x => x.att.length < PASS_COUNT && x.att.length + x.rem === PASS_COUNT),
-    lost: per.filter(x => x.att.length + x.rem < PASS_COUNT),
+    risk: per.filter(x => !awaitingSignup(x.u) && x.att.length < PASS_COUNT && x.att.length + x.rem === PASS_COUNT),
+    lost: per.filter(x => !awaitingSignup(x.u) && x.att.length + x.rem < PASS_COUNT),
     per
   };
 }
@@ -843,6 +897,11 @@ ${LECTURES.map(l => { const k = S.allAtt.filter(a => a.lecture === l.n); return 
   $("#cpRpt").onclick = () => copyText(t, "복사했어요", $("#rpt"));
 }
 async function myDataExport() {
+  if (S.deepAppLoad !== "ready") {
+    if (S.deepAppLoad === "error") loadMyDeepApp();
+    toast("심화과정 지원 정보를 불러오는 중이에요. 잠시 뒤 다시 시도해 주세요.");
+    return;
+  }
   const data = { 안내: `${APP.org} ${APP.name} 개인정보 열람 (개인정보 보호법 제35조)`, 내려받은_시각: fmtTime(Date.now()), 계정: { id: S.user.uid, 이메일: S.user.email }, 신청서: S.profile, 출결: S.myAtt.map(a => ({ 강: a.lecture, 방식: a.method, 일시: fmtTime(a.at) })), 심화과정_지원서: S.deepApp, 문의: S.myQs.map(q => ({ 내용: q.text, 답변: q.answer || "", 일시: fmtTime(q.at) })) };
   const json = JSON.stringify(data, (k, v) => (v && typeof v === "object" && typeof v.toMillis === "function" ? fmtTime(v.toMillis()) : v), 2);
   try {
@@ -855,16 +914,33 @@ async function copyText(t, msg, el) {
   try { await navigator.clipboard.writeText(t); toast(msg); }
   catch (e) { if (el) { el.focus(); el.select(); } toast("길게 눌러 직접 복사해 주세요"); }
 }
+async function withdrawAccount() {
+  const u = S.user;
+  if (!(await confirmSheet("회원 탈퇴할까요?", "계정, 수강 신청서, 출결 기록, 문의, 심화 지원서가 지워지고 되돌릴 수 없어요.", "탈퇴하기", true)) || S.user !== u) return;
+  try { await B.deleteAccount(); toast("탈퇴했어요. 그동안 고마웠어요."); }
+  catch (e) {
+    toast(e.code === "auth/requires-recent-login" ? "로그아웃 후 다시 로그인해서 탈퇴해 주세요." : authMsg(e), 4000);
+  }
+}
 function userSheet(uid) {
   const u = S.users.find(x => x.uid === uid); if (!u) return;
   const att = attOf(uid), isSt = S.staffList.some(s => s.id === uid), d = S.deepApps.find(a => a.uid === uid);
+  const approved = S.approvals?.has(uid);
   sheet(`<div class="row between"><h2 style="margin:0;font-size:1.05rem">${esc(u.name)}</h2><span class="pill p-gold">${esc(u.no)}</span></div>
   <dl class="kv" style="margin-top:10px"><dt>이메일</dt><dd>${esc(u.email)}</dd><dt>출생</dt><dd>${esc(u.birthYear)}년</dd><dt>민주평통</dt><dd>${esc(affiliationLabel(u))}</dd><dt>구분</dt><dd>${esc(memberLabel(u))}${u.memberType === "자문위원" && u.memberNo ? ` · 위촉 번호 ${esc(u.memberNo)}` : ""}</dd><dt>지역</dt><dd>${esc(u.region)}</dd><dt>소속</dt><dd>${esc(u.org || "-")}</dd><dt>연락처</dt><dd>${esc(u.phone || "-")}</dd><dt>참여</dt><dd>${u.mode === "online" ? "온라인" : "현장"}</dd><dt>사진 동의</dt><dd>${u.photoConsent ? "동의" : "미동의"}</dd><dt>심화</dt><dd>${d ? DEEP_STATUS[d.status] : "미지원"}</dd></dl>
-  <h3 style="margin:14px 0 6px;font-size:.9rem">출결 (눌러서 수동 처리)</h3>
+  ${awaitingSignup(u) ? '<h3 style="margin:14px 0 6px;font-size:.9rem">가입 승인 대기</h3><p class="small muted" style="margin:0 0 8px">신청 내용을 확인한 뒤 승인해 주세요.</p><button class="btn mini" id="approveSignup">가입 승인</button>' : ""}
+  ${approved ? `<h3 style="margin:14px 0 6px;font-size:.9rem">출결 (눌러서 수동 처리)</h3>
   <div class="row" style="gap:6px">${LECTURES.map(l => `<button class="dot ${att.includes(l.n) ? "done" : ""}" style="flex:1;border:0;cursor:pointer" data-man="${l.n}" aria-pressed="${att.includes(l.n)}" aria-label="${l.n}강 ${att.includes(l.n) ? "출석 취소" : "출석 처리"}">${l.n}</button>`).join("")}</div>
-  <p class="small muted" style="margin:8px 0 0">휴대폰 분실, 중계 접속 확인 등 예외 상황에만 쓰세요. 처리한 운영진이 함께 기록돼요.</p>
+  <p class="small muted" style="margin:8px 0 0">휴대폰 분실, 중계 접속 확인 등 예외 상황에만 쓰세요. 처리한 운영진이 함께 기록돼요.</p>` : ""}
   ${u.memberType === "자문위원" ? `<h3 style="margin:14px 0 6px;font-size:.9rem">자문위원 인증</h3><p class="small muted" style="margin:0 0 8px">${esc(affiliationLabel(u))} ${esc(u.memberTerm || "")} 자문위원 명단과 이름·소속이 맞는지 확인한 뒤 눌러 주세요.</p><div class="row wrap" style="gap:8px">${u.memberVerified === "verified" ? '<button class="btn ghost mini" data-ver="pending">인증 취소</button>' : '<button class="btn mini" data-ver="verified">자문위원 인증</button><button class="btn ghost mini" data-ver="rejected">명단에 없음 (반려)</button>'}</div>` : ""}
-  <div class="row wrap" style="gap:8px;margin-top:12px">${isSt ? "" : '<button class="btn ghost mini" id="mkStaff">운영진으로 지정</button>'}</div>`);
+  ${approved && !isSt ? '<div style="margin-top:12px"><button class="btn ghost mini" id="mkStaff">운영진으로 지정</button></div>' : ""}`);
+  const approval = $("#approveSignup");
+  if (approval) approval.onclick = async () => {
+    const reviewer = S.user;
+    if (!(await confirmSheet("가입을 승인할까요?", `${u.name}님이 앱에 들어가 공지, 일정과 출석 기능을 이용할 수 있어요.`, "승인하기")) || S.user !== reviewer) return;
+    try { await B.approveSignup(uid); toast(`${u.name}님의 가입을 승인했어요.`); refresh(); }
+    catch (e) { toast("가입을 승인하지 못했어요. 신청과 권한 상태를 확인해 주세요."); }
+  };
   $$("[data-ver]").forEach(b => (b.onclick = async () => {
     const v = b.dataset.ver;
     try { await B.setMemberVerified(uid, v); const t = S.users.find(x => x.uid === uid); if (t) t.memberVerified = v; toast(v === "verified" ? `${u.name}님을 자문위원으로 인증했어요` : v === "rejected" ? "인증을 반려했어요" : "인증을 취소했어요"); closeSheet(); render(); }
@@ -914,6 +990,7 @@ async function onScan(text) {
 async function checkIn(uid, method) {
   const u = S.users.find(x => x.uid === uid);
   if (!u) { toast("등록되지 않은 참가자예요. 수강 신청 여부를 확인해 주세요."); navigator.vibrate && navigator.vibrate([60, 60, 60]); return; }
+  if (awaitingSignup(u)) { toast("가입 승인 대기 중인 계정이에요."); return; }
   try {
     const r = await B.recordAttendance(uid, S.scanLecture, method);
     navigator.vibrate && navigator.vibrate(r.duplicate ? [40, 40, 40] : 80);
@@ -946,6 +1023,8 @@ const BIND = {
     if (vOk) { $("#vPv").onclick = privacySheet; $("#vTm").onclick = termsSheet; vOk.onclick = async () => { try { await B.updateProfile({ privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion }); Object.assign(S.profile, { privacyVersion: APP.privacyVersion, termsVersion: APP.termsVersion }); render(); } catch (e) { toast("저장하지 못했어요"); } }; }
     const a = $("#applyBtn"); a && (a.onclick = deepForm);
     const e = $("#editDeep"); e && (e.onclick = deepForm);
+    const retry = $("#deepRetry");
+    if (retry) retry.onclick = () => { loadMyDeepApp(); render(); };
   },
   sched() {},
   att() {
@@ -977,11 +1056,7 @@ const BIND = {
     $("#cpUid").onclick = () => copyText(S.user.uid, "계정 ID를 복사했어요");
     $("#pvBtn2").onclick = privacySheet; $("#tmBtn2").onclick = termsSheet; $("#pmBtn2").onclick = permSheet; $("#dlBtn").onclick = myDataExport;
     $("#outBtn").onclick = async () => { if (await confirmSheet("로그아웃할까요?", "다시 들어오려면 이메일과 비밀번호가 필요해요.", "로그아웃")) B.signOut(); };
-    $("#delBtn").onclick = async () => {
-      if (!(await confirmSheet("회원 탈퇴할까요?", "계정, 수강 신청서, 출결 기록, 문의, 심화 지원서가 즉시 지워지고 되돌릴 수 없어요. 수료 요건과 수료증도 함께 사라져요.", "탈퇴하기", true))) return;
-      try { await B.deleteAccount(); toast("탈퇴했어요. 그동안 고마웠어요."); }
-      catch (e) { toast(authMsg(e), 4000); }
-    };
+    $("#delBtn").onclick = withdrawAccount;
   },
   dash() {
     const st = stats();
@@ -989,11 +1064,17 @@ const BIND = {
     $("#nudgeBtn").onclick = () => { S.notiDraft = { title: "[수료 안내] 남은 강의를 꼭 챙겨 주세요", body: "남은 강의를 모두 들으면 수료할 수 있어요. 현장 참석이 어렵다면 온라인 출석도 인정돼요." }; go("noti"); };
     $("#csvBtn").onclick = csvExport;
     $("#reportBtn").onclick = reportDraft;
+    $("#staffOut").onclick = () => B.signOut();
+    const review = $("#reviewSignups");
+    if (review) review.onclick = () => {
+      Object.assign(S, { peopleF: "signup", peopleQ: "", peopleC: "" });
+      go("people");
+    };
     $$("[data-unstaff]").forEach(b => (b.onclick = async () => { if (!(await confirmSheet("운영진에서 해제할까요?", "이 계정은 더 이상 운영진 화면을 쓸 수 없어요.", "해제", true))) return; try { await B.removeStaff(b.dataset.unstaff); toast("해제했어요"); } catch (e) { toast("해제하지 못했어요"); } }));
     $("#staffForm").onsubmit = async e => {
       e.preventDefault(); const id = $("#staffUid").value.trim();
       if (!/^[A-Za-z0-9_-]{6,128}$/.test(id)) return toast("계정 ID 형식이 아니에요");
-      try { await B.addStaff(id, "운영진"); $("#staffUid").value = ""; toast("운영진으로 추가했어요"); } catch (e2) { toast("추가하지 못했어요"); }
+      try { await B.addStaff(id, "운영진"); $("#staffUid").value = ""; toast("운영진으로 추가했어요"); } catch (e2) { toast("추가하지 못했어요. 가입이 승인된 계정인지 확인해 주세요."); }
     };
   },
   people() {
@@ -1056,6 +1137,7 @@ function restartScores() {
 function startStaffData() {
   if (staffUnsubs.length || !S.staff) return;
   staffUnsubs.push(B.watchUsers(r => { S.users = r; refresh(); }));
+  staffUnsubs.push(B.watchApprovals(ids => { S.approvals = ids; refresh(); }));
   staffUnsubs.push(B.watchAllAttendance(r => { S.allAtt = r; refresh(); }));
   staffUnsubs.push(B.watchDeepApps(r => { S.deepApps = r; refresh(); }));
   staffUnsubs.push(B.watchQuestions(r => { S.questions = r; refresh(); }));
@@ -1063,24 +1145,50 @@ function startStaffData() {
   restartScores();
 }
 let prevAttCount = null;
-async function onSignedIn(u) {
-  S.user = u;
-  $("#root").innerHTML = '<div class="auth"><p class="note" style="text-align:center">불러오는 중…</p></div>';
-  try {
-    [S.profile, S.staff] = await Promise.all([B.getProfile(), B.isStaff()]);
-    S.deepApp = S.profile ? await B.getDeepApp() : null;
-  } catch (e) {
-    console.error(e);
-    $("#root").innerHTML = '<div class="auth"><section class="card"><h2>연결하지 못했어요</h2><p class="small muted">인터넷 연결을 확인한 뒤 다시 열어 주세요.</p><button class="btn block" onclick="location.reload()">다시 시도</button></section></div>';
-    return;
-  }
+async function loadAccount(u) {
+  const account = await B.getAccount();
+  if (S.user !== u) return;
+  Object.assign(S, account);
+  if (!S.approved && !S.staff) return render();
   if (S.profile && S.profile.largeText != null && LS.get("large", null) == null) { LS.set("large", !!S.profile.largeText); applyPrefs(); }
-  S.role = S.staff ? LS.get("role", S.profile ? "p" : "a") : "p";
-  if (!S.profile && S.staff) S.role = "a";
-  unsubs.push(B.watchNotices(r => { S.notices = r; refresh(); }));
-  if (S.profile) startProfileData();
+  S.role = S.staff ? (S.approved ? LS.get("role", "p") : "a") : "p";
+  if (!unsubs.length) unsubs.push(B.watchNotices(r => { S.notices = r; refresh(); }));
+  if (S.approved) startProfileData();
   if (S.role === "a") startStaffData();
-  if (S.profile || S.staff) { shell(); render("fwd"); } else render();
+  render("fwd");
+}
+function renderConnectionError(retry) {
+  $("#root").innerHTML = `<div class="auth"><section class="card">
+    <h2>연결하지 못했어요</h2><p class="small muted">인터넷 연결을 확인하고 다시 시도해 주세요.</p>
+    <button class="btn block" id="connectionRetry">다시 시도</button>
+    ${S.user ? '<button class="btn ghost block" id="connectionOut" style="margin-top:8px">로그아웃</button>' : ""}
+  </section></div>`;
+  $("#connectionRetry").onclick = retry;
+  const out = $("#connectionOut");
+  if (out) out.onclick = () => B.signOut();
+}
+async function onSignedIn(u) {
+  $("#root").innerHTML = '<div class="auth"><p class="note" role="status" style="text-align:center">불러오는 중…</p></div>';
+  try { await loadAccount(u); }
+  catch (e) {
+    console.error(e);
+    if (S.user === u) renderConnectionError(() => onSignedIn(u));
+  }
+}
+async function loadMyDeepApp() {
+  const u = S.user;
+  S.deepAppLoad = "loading";
+  try {
+    const deepApp = await B.getDeepApp();
+    if (S.user !== u) return;
+    S.deepApp = deepApp;
+    S.deepAppLoad = "ready";
+  } catch (e) {
+    if (S.user !== u) return;
+    console.error(e);
+    S.deepAppLoad = "error";
+  }
+  refresh();
 }
 function startProfileData() {
   if (S._profSubs) return; S._profSubs = true;
@@ -1093,24 +1201,30 @@ function startProfileData() {
     }));
     unsubs.push(B.watchMyQuestions(r => { S.myQs = r; refresh(); }));
   }
+  loadMyDeepApp();
 }
 
 /* ───────── 시작 ───────── */
 function offlineBanner() {
   let b = $("#offline");
   if (navigator.onLine) { b && b.remove(); return; }
-  if (!b) { b = document.createElement("div"); b.id = "offline"; b.className = "offline"; b.textContent = "오프라인 · 연결되면 자동으로 저장돼요"; document.body.appendChild(b); }
+  if (!b) { b = document.createElement("div"); b.id = "offline"; b.className = "offline"; b.textContent = "오프라인 · 인터넷 연결을 확인해 주세요"; document.body.appendChild(b); }
 }
 window.addEventListener("online", offlineBanner); window.addEventListener("offline", offlineBanner);
 
 (async function boot() {
-  B = await createBackend();
-  if (B.mode === "demo" && !B.updateDeepApp) B.updateDeepApp = async d => { const a = await B.getDeepApp(); Object.assign(a, d); };
+  try { B = await createBackend(); }
+  catch (e) {
+    console.error(e);
+    $("#splash")?.remove();
+    renderConnectionError(() => location.reload());
+    return;
+  }
   let first = true;
   B.onAuth(async u => {
-    stopAll(); stopScanner(); prevAttCount = null;
-    Object.assign(S, { profile: null, staff: false, myAtt: [], notices: [], deepApp: null, myQs: [], users: [], allAtt: [], deepApps: [], questions: [], scores: [], staffList: [], chat: [] });
-    if (u) await onSignedIn(u); else { S.user = null; renderAuth(); }
+    stopAll(); stopScanner(); closeSheet(); prevAttCount = null;
+    Object.assign(S, { user: u, profile: null, staff: false, approved: false, onboardStep: 0, draft: {}, myAtt: [], notices: [], deepApp: null, deepAppLoad: "loading", myQs: [], users: [], approvals: null, allAtt: [], deepApps: [], questions: [], scores: [], staffList: [], chat: [] });
+    if (u) await onSignedIn(u); else { S.authMode = "login"; renderAuth(); }
     if (first) { first = false; setTimeout(() => { const sp = $("#splash"); sp && sp.remove(); }, RM ? 0 : 1500); }
   });
   offlineBanner();

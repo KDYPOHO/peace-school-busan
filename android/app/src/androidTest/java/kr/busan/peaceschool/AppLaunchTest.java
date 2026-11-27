@@ -20,6 +20,7 @@ public class AppLaunchTest {
         var context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         assertEquals("kr.busan.peaceschool", context.getPackageName());
         assertEquals(36, context.getApplicationInfo().targetSdkVersion);
+        assertEquals(24, context.getApplicationInfo().minSdkVersion);
 
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             assertEventually(scenario, "Packaged sign-in screen and logo", """

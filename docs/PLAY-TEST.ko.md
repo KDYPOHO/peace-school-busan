@@ -64,6 +64,8 @@ Apple Silicon Mac(`Mac15,3`, macOS 27.2.1)에서 Apple 시험 빌드 16을 Xcode
 
 운영 프로젝트에는 기본 1~5강 일정이 있고 선발 상태인 심화 지원은 0건이었다. 심화 마감일은 공식 일정을 확정한 뒤 반영한다. 운영 규칙은 현행 상태다. 전환 시 양쪽 내부 빌드의 검증과 규칙 적용 일정을 함께 확인한다. [현행 규칙 소스](https://github.com/KDYPOHO/peace-school-busan/blob/4d7037b58bbf0323aa090a8b815971c1ceb909e9/firestore.rules)
 
+운영과 시험 Firebase에서 이메일·비밀번호 가입이 활성화돼 있다. 운영 Firestore에는 기존 규칙이, 시험 Firestore에는 가입 승인 규칙이 적용된 상태를 각각 확인했다.
+
 ## 가입 승인 후보 서명 결과
 
 1.3.2 Android 46은 Play Console에 등록된 기존 업로드 인증서로 서명했다. `jarsigner`와 `bundletool validate` 검사를 통과했으며 패키지 `kr.busan.peaceschool`, 최소 API 24, 대상 API 36을 확인했다. Apple 16은 Xcode에서 App Store Connect용 IPA로 내보냈고, 배포 서명과 iPhone·iPad 지원을 확인했다. 두 서명 패키지에서 시험 Firebase 설정을 포함한 공통 웹 파일 25개의 SHA-256이 일치했다. [후보 소스 및 자동 검증](https://github.com/KDYPOHO/peace-school-busan/actions/runs/45960878587)
@@ -73,7 +75,7 @@ Apple Silicon Mac(`Mac15,3`, macOS 27.2.1)에서 Apple 시험 빌드 16을 Xcode
 | 한반도-평화학교-Play-내부시험-46.aab | `743253029db3171e5f90ac1d63d947ee86e128d0f8ab90446bdc4a6bebe3e358` |
 | 한반도-평화학교-TestFlight-내부시험-16.ipa | `726e5e297ba71ad8931213bd1d2bc34433421f75a4361ee06914ecab286cbc72` |
 
-Play Console 내부 테스트의 현재 빌드는 1.3.1(29)이며 TestFlight 내부 그룹은 1.3.1(11)을 테스트 중이다. 이 TestFlight 그룹은 Xcode 빌드를 자동 배포하도록 설정되어 있어 승인 실기기 검증이 끝날 때까지 최신 후보 업로드를 보류한다.
+2026년 11월 27일 Play Console 내부 테스트 트랙에서 1.3.1(29)이 내부 테스터에게 제공 중인 상태를 확인했다. TestFlight 내부 그룹에서 마지막으로 확인한 빌드는 1.3.1(11)이다. 최신 확인에서는 App Store Connect 로그인이 필요했다. 이 TestFlight 그룹은 Xcode 빌드를 자동 배포하도록 설정되어 있어 승인 실기기 검증이 끝날 때까지 최신 후보 업로드를 보류한다.
 
 ### 운영 Firebase 연결 후보
 

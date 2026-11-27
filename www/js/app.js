@@ -1353,25 +1353,3 @@ window.addEventListener("online", offlineBanner); window.addEventListener("offli
   offlineBanner();
   if ("serviceWorker" in navigator && location.protocol === "https:" && !isNative) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
-
-// 카드 기울기 (마우스·터치)
-if (!RM) {
-  let cur = null;
-  const reset = c => { c.classList.remove("tilting"); c.style.removeProperty("--rx"); c.style.removeProperty("--ry"); };
-  document.addEventListener("pointermove", e => {
-    if (e.pointerType !== "mouse" || e.target.closest("button,a,input,select,textarea,.qr-pass,.scan-card,.inquiry-card")) {
-      if (cur) reset(cur);
-      cur = null;
-      return;
-    }
-    const c = e.target.closest("main .card, main .stat"); if (cur && cur !== c) reset(cur); cur = c; if (!c) return;
-    const r = c.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
-    const k = c.classList.contains("stat") ? 10 : Math.max(3, 7 - r.height / 120);
-    c.classList.add("tilting"); c.style.setProperty("--ry", ((x - .5) * k * 2).toFixed(2) + "deg"); c.style.setProperty("--rx", ((.5 - y) * k * 2).toFixed(2) + "deg");
-    c.style.setProperty("--mx", (x * 100).toFixed(1) + "%"); c.style.setProperty("--my", (y * 100).toFixed(1) + "%");
-  });
-  const resetCurrent = () => { if (cur) reset(cur); cur = null; };
-  document.addEventListener("pointercancel", resetCurrent);
-  document.addEventListener("pointerleave", resetCurrent);
-  window.addEventListener("blur", resetCurrent);
-}

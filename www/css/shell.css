@@ -13,7 +13,7 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .auth .logo{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
 .auth .logo .tile{width:88px;height:88px;display:grid;place-items:center}
 .auth .logo .tile img{width:88px;height:88px;object-fit:contain}
-.auth .logo .signature{width:min(100%,280px);height:auto;border-radius:8px}
+.auth .logo .signature{width:min(100%,300px);height:auto;padding:8px 10px;border-radius:12px;background:#fff;box-shadow:var(--glass-shadow)}
 .auth .logo b{font-family:var(--f-serif);font-size:1.45rem}
 .auth .logo span{font-size:.8rem;color:var(--muted)}
 .err{color:var(--bad);font-size:.82rem;min-height:1.2em;margin:0}
@@ -25,12 +25,14 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .kv dt{color:var(--muted)}.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 #reader{width:100%;border-radius:14px;overflow:hidden;background:#000;margin-bottom:10px}
 #reader video{display:block;width:100%!important}
+.inquiry-card,.scan-card{border-color:var(--glass-line)}
+.inquiry-card .inquiry-reply{border-style:solid}
 .scan-card > * + *,#attendanceHelp{margin-top:10px}
 .scan-hint{margin-bottom:10px}
 .scan-result{background:var(--surface-2);padding:9px 12px;border-radius:9px;overflow-wrap:anywhere}
 .scan-result[data-state="ok"]{background:var(--ok-soft);color:var(--ok)}
 .scan-result[data-state="warn"]{background:var(--warn-soft);color:var(--warn)}
-.phone:has(.scan-card) .blobs i,.phone:has(.scan-card) .bar i::after{animation:none}
+.phone:has(.scan-card) .bar i::after{animation:none}
 .qr-pass{width:min(224px,100%);height:auto;aspect-ratio:1;margin:10px auto;padding:16px}
 .qr-pass svg{width:100%;height:auto}
 .inquiry-card .form p{margin:0}
@@ -41,7 +43,6 @@ nav.tabs button.new-reply::after{content:"";position:absolute;top:5px;left:calc(
 .inquiry-text{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:5px}
 @media (pointer:coarse) {
   body input,body select,body textarea,body .composer input,body label.f :is(input,select,textarea){font-size:max(16px,1em)}
-  .card,.stat,.card:active,.stat:active{transform:none}
 }
 .offline{position:fixed;top:env(safe-area-inset-top,0px);left:50%;transform:translateX(-50%);z-index:50;background:var(--warn);color:#fff;font-size:.75rem;padding:4px 12px;border-radius:0 0 10px 10px}
 .mini{font-size:.75rem;padding:4px 10px}

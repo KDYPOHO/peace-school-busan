@@ -49,7 +49,7 @@ jobs:
       - run: npx cap sync android
       - name: 디버그 APK 및 서명 전 AAB 빌드
         working-directory: android
-        run: chmod +x gradlew && ./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest bundleRelease --no-daemon
+        run: chmod +x gradlew && ./gradlew testDebugUnitTest assembleDebug :app:assembleDebugAndroidTest bundleRelease --no-daemon
       - name: 패키지 안의 공통 웹 파일 확인
         env:
           PSB_BUILD_MODE: ${{ github.ref == 'refs/heads/main' && 'production' || (vars.PSB_STAGING_PROJECT_ID && 'staging' || 'development') }}

@@ -173,7 +173,7 @@ function render(anim) {
 }
 // 데이터가 바뀌면 다시 그림. 입력 중이면 입력이 끝난 뒤에.
 function refresh() {
-  if (!S.user || !$("#view")) return;
+  if (!S.user || !$("#view") || (S.role === "p" && !S.profile)) return;
   updateBell();
   if (S.helpSending && S.role === "p" && S.tab.p === "ai") {
     pending = true;

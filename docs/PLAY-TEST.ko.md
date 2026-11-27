@@ -5,7 +5,7 @@
 ## 후보 패키지와 설치 시험
 
 1. GitHub 저장소 변수 `PSB_STAGING_PROJECT_ID`와 `PSB_STAGING_FIREBASE_CONFIG`에 별도 시험 프로젝트 ID와 해당 Firebase 웹 앱 설정을 지정한다. `codex/android-play-test` 브랜치에서 Android 워크플로를 실행한다. `peace-school-debug-apk`는 Android 설치 시험용이고 `peace-school-unsigned-aab`는 서명 전 번들이다. 에뮬레이터 실행 결과는 해당 잡의 시작 검사와 테스트 XML에서 확인한다.
-2. Android가 통과하면 같은 커밋에서 Apple 워크플로를 수동 실행한다. Apple 워크플로는 같은 커밋의 Android AAB와 Apple 패키지를 각각 공통 `www/` 및 시험 Firebase 설정과 대조한다. Apple 실행 요약에 커밋과 연결된 Android 실행 번호가 기록된다. 로컬 패키지를 대조할 때는 시험 설정으로 `www/`를 생성한 후 `python3 scripts/verify_web_assets.py <경로> staging`을 사용한다.
+2. Android 검증이 통과하면 같은 GitHub Actions 실행에서 같은 커밋으로 Apple 빌드를 이어서 만든다. Android AAB와 Apple 패키지를 각각 공통 `www/` 및 시험 Firebase 설정과 대조한다. Apple 작업 요약에 커밋과 실행 번호가 기록된다. 로컬 패키지를 대조할 때는 시험 설정으로 `www/`를 생성한 후 `python3 scripts/verify_web_assets.py <경로> staging`을 사용한다.
 3. 실제 기기에서는 별도 시험 Firebase로 신청과 출결 동기화, 로그인, QR 권한 허용·거절·재요청, 수강번호 입력, 재시작, 탈퇴를 확인한다. 가상 정보만 사용하고 기기·OS·앱 빌드·커밋을 기록한다.
 
 ## 휴대폰·태블릿·Mac 화면 확인

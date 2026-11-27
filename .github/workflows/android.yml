@@ -2,7 +2,7 @@ name: 안드로이드 앱 빌드 (APK)
 on:
   push:
     branches: [main, codex/android-play-test]
-    paths: ["www/**", "android/**", "scripts/**", "tests/**", "capacitor.config.json", "package*.json", "firebase.json", "firestore.rules", ".github/workflows/android.yml"]
+    paths: ["www/**", "android/**", "ios/**", "scripts/**", "tests/**", "capacitor.config.json", "package*.json", "firebase.json", "firestore.rules", ".github/workflows/android.yml", ".github/workflows/apple.yml"]
   pull_request:
     paths: ["www/**", "android/**", "scripts/**", "tests/**", "capacitor.config.json", "package*.json", "firebase.json", "firestore.rules", ".github/workflows/android.yml"]
   workflow_dispatch:
@@ -85,6 +85,7 @@ jobs:
           name: android-emulator-evidence
           path: |
             ${{ runner.temp }}/peace-school-api*/emulator.log
+            ${{ runner.temp }}/peace-school-api*/device-logcat.log
             ${{ runner.temp }}/peace-school-api*/webview.txt
             ${{ runner.temp }}/peace-school-api*/connected/
       - name: 누구나 받을 수 있는 시험용 다운로드 링크 갱신 (main에서만)
@@ -100,3 +101,12 @@ jobs:
           else
             gh release create test-latest peace-school.apk --title "시험용 앱 (최신)" --notes "$NOTE" --prerelease --target "$GITHUB_SHA"
           fi
+  verify-staging-apple:
+    needs: build
+    if: github.ref == 'refs/heads/codex/android-play-test' && vars.PSB_STAGING_PROJECT_ID != ''
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/apple.yml
+    with:
+      android_artifact_from_caller: true

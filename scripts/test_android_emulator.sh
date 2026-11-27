@@ -40,7 +40,13 @@ fi
 cd android
 rm -rf app/build/outputs/androidTest-results/connected
 status=0
-./gradlew :app:connectedDebugAndroidTest --no-daemon || status=$?
+timeout --kill-after=15s 240s ./gradlew :app:connectedDebugAndroidTest --no-daemon || status=$?
+if [[ "$status" -ne 0 ]]; then
+  timeout 15s adb logcat -d -t 1000 >"$evidence/device-logcat.log" 2>&1 || true
+  if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then
+    echo "::error::Android API $api instrumentation exceeded four minutes. See android-emulator-evidence."
+  fi
+fi
 if [[ -d app/build/outputs/androidTest-results/connected ]]; then
   cp -R app/build/outputs/androidTest-results/connected "$evidence/"
 fi

@@ -4,14 +4,20 @@ on:
     branches: [codex/android-play-test]
     paths: [ios/**, .github/workflows/apple.yml]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      android_artifact_from_caller:
+        type: boolean
+        required: true
 permissions:
   actions: read
   contents: read
 concurrency:
-  group: apple-candidate-${{ github.ref }}
+  group: apple-candidate-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   verify-apple:
+    if: vars.PSB_STAGING_PROJECT_ID == '' || inputs.android_artifact_from_caller
     runs-on: macos-26
     timeout-minutes: 25
     env:
@@ -28,26 +34,31 @@ jobs:
         run: |
           npm run build:web
           npx cap sync ios
+      - name: 같은 실행에서 생성한 Android AAB 받기
+        if: inputs.android_artifact_from_caller
+        uses: actions/download-artifact@v4
+        with:
+          name: peace-school-unsigned-aab
+          path: ${{ runner.temp }}/android
+      - name: 같은 커밋의 Android AAB와 시험 자산 대조
+        if: inputs.android_artifact_from_caller
+        run: |
+          test "$PSB_BUILD_MODE" = staging
+          python3 scripts/verify_web_assets.py "$RUNNER_TEMP/android/app-release.aab" "$PSB_BUILD_MODE"
+          echo "Shared commit $GITHUB_SHA · Actions run $GITHUB_RUN_ID · Firebase mode $PSB_BUILD_MODE" >> "$GITHUB_STEP_SUMMARY"
       - name: 통과한 Android 패키지와 공통 웹 파일 대조
+        if: ${{ !inputs.android_artifact_from_caller }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$PSB_BUILD_MODE" == staging ]]; then
-            candidate=$(gh run list --workflow android.yml --branch "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
-            if [[ -z "$candidate" ]]; then
-              echo '::error::Run the Android staging build for this exact commit before starting the Apple build.'
-              exit 1
+          candidate=
+          runs=$(gh run list --workflow android.yml --branch "$GITHUB_REF_NAME" --status success --limit 12 --json databaseId,headSha --jq '.[] | [.databaseId, .headSha] | @tsv')
+          while IFS=$'\t' read -r run sha; do
+            if [[ -n "$run" ]] && git diff --quiet "$sha" HEAD -- www scripts/bundle-web.mjs scripts/firebase-web-production.json capacitor.config.json package.json package-lock.json; then
+              candidate="$run"
+              break
             fi
-          else
-            candidate=
-            runs=$(gh run list --workflow android.yml --branch "$GITHUB_REF_NAME" --status success --limit 12 --json databaseId,headSha --jq '.[] | [.databaseId, .headSha] | @tsv')
-            while IFS=$'\t' read -r run sha; do
-              if [[ -n "$run" ]] && git diff --quiet "$sha" HEAD -- www scripts/bundle-web.mjs scripts/firebase-web-production.json capacitor.config.json package.json package-lock.json; then
-                candidate="$run"
-                break
-              fi
-            done <<< "$runs"
-          fi
+          done <<< "$runs"
           test -n "$candidate"
           gh run download "$candidate" --name peace-school-unsigned-aab --dir "$RUNNER_TEMP/android"
           python3 scripts/verify_web_assets.py "$RUNNER_TEMP/android/app-release.aab" "$PSB_BUILD_MODE"

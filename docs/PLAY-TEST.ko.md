@@ -1,11 +1,11 @@
 # 한반도 평화학교 Android 내부 테스트 후보
 
-앱 식별자는 `kr.busan.peaceschool`, 표시 버전은 `1.3.1`이다. Android와 iOS는 같은 커밋의 `www/`를 사용한다. Android 대상 SDK는 36이고 최소 SDK는 24(Android 7.0)다. Play Console의 자동 보호를 적용한 내부 테스트 번들의 요구사항을 반영했다. 로그인 화면의 국문 시그니처는 제공된 민주평화통일자문회의 원본이며, 앱 아이콘과 화면의 심벌은 기존 2색 공식 자산을 쓴다.
+앱 식별자는 `kr.busan.peaceschool`, 후보 표시 버전은 `1.3.2`다. Android와 iOS 내부 시험판은 같은 커밋의 `www/`를 사용한다. Android 대상 SDK는 36이고 최소 SDK는 24(Android 7.0)다. Play Console의 자동 보호를 적용한 내부 테스트 번들의 요구사항을 반영했다. 로그인 화면의 국문 시그니처는 제공된 민주평화통일자문회의 원본이며, 앱 아이콘과 화면의 심벌은 기존 2색 공식 자산을 쓴다.
 
 ## 후보 패키지와 설치 시험
 
-1. GitHub Actions에서 같은 후보 커밋의 Android 워크플로를 연다. `peace-school-debug-apk`는 Android 설치 시험용이고 `peace-school-unsigned-aab`는 서명 전 번들이다. 에뮬레이터 실행 결과는 해당 잡의 시작 검사와 테스트 XML에서 확인한다.
-2. iOS를 빌드할 때 `npm ci`와 `npx cap sync ios` 후 Xcode의 `App` 스킴을 사용한다. Android APK, AAB 및 iOS의 `App.app/public` 모두에 `python3 scripts/verify_web_assets.py <경로>`를 실행해 공통 파일을 비교한다.
+1. GitHub 저장소 변수 `PSB_STAGING_PROJECT_ID`와 `PSB_STAGING_FIREBASE_CONFIG`에 별도 시험 프로젝트 ID와 해당 Firebase 웹 앱 설정을 지정한다. `codex/android-play-test` 브랜치에서 Android 워크플로를 실행한다. `peace-school-debug-apk`는 Android 설치 시험용이고 `peace-school-unsigned-aab`는 서명 전 번들이다. 에뮬레이터 실행 결과는 해당 잡의 시작 검사와 테스트 XML에서 확인한다.
+2. Android가 통과하면 같은 커밋에서 Apple 워크플로를 수동 실행한다. Apple 워크플로는 같은 커밋의 Android AAB와 Apple 패키지를 각각 공통 `www/` 및 시험 Firebase 설정과 대조한다. Apple 실행 요약에 커밋과 연결된 Android 실행 번호가 기록된다. 로컬 패키지를 대조할 때는 시험 설정으로 `www/`를 생성한 후 `python3 scripts/verify_web_assets.py <경로> staging`을 사용한다.
 3. 실제 기기에서는 별도 시험 Firebase로 신청과 출결 동기화, 로그인, QR 권한 허용·거절·재요청, 수강번호 입력, 재시작, 탈퇴를 확인한다. 가상 정보만 사용하고 기기·OS·앱 빌드·커밋을 기록한다.
 
 ## 휴대폰·태블릿·Mac 화면 확인

@@ -32,18 +32,26 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          candidate=
-          runs=$(gh run list --workflow android.yml --branch "$GITHUB_REF_NAME" --status success --limit 12 --json databaseId,headSha --jq '.[] | [.databaseId, .headSha] | @tsv')
-          while IFS=$'\t' read -r run sha; do
-            if [[ -n "$run" ]] && git diff --quiet "$sha" HEAD -- www scripts/bundle-web.mjs scripts/firebase-web-production.json capacitor.config.json package.json package-lock.json; then
-              candidate="$run"
-              break
+          if [[ "$PSB_BUILD_MODE" == staging ]]; then
+            candidate=$(gh run list --workflow android.yml --branch "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            if [[ -z "$candidate" ]]; then
+              echo '::error::Run the Android staging build for this exact commit before starting the Apple build.'
+              exit 1
             fi
-          done <<< "$runs"
+          else
+            candidate=
+            runs=$(gh run list --workflow android.yml --branch "$GITHUB_REF_NAME" --status success --limit 12 --json databaseId,headSha --jq '.[] | [.databaseId, .headSha] | @tsv')
+            while IFS=$'\t' read -r run sha; do
+              if [[ -n "$run" ]] && git diff --quiet "$sha" HEAD -- www scripts/bundle-web.mjs scripts/firebase-web-production.json capacitor.config.json package.json package-lock.json; then
+                candidate="$run"
+                break
+              fi
+            done <<< "$runs"
+          fi
           test -n "$candidate"
           gh run download "$candidate" --name peace-school-unsigned-aab --dir "$RUNNER_TEMP/android"
           python3 scripts/verify_web_assets.py "$RUNNER_TEMP/android/app-release.aab" "$PSB_BUILD_MODE"
-          echo "Android Actions run $candidate" >> "$GITHUB_STEP_SUMMARY"
+          echo "Apple commit $GITHUB_SHA · Android Actions run $candidate · Firebase mode $PSB_BUILD_MODE" >> "$GITHUB_STEP_SUMMARY"
       - name: iPhone과 iPad용 공통 아카이브 검사
         run: |
           xcodebuild -version

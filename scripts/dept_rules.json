@@ -1,0 +1,174 @@
+{
+  "_설명": "7개 부서 자동 점검 규칙. 단어를 추가·삭제해 기준을 조정함. 줄 끝에 'dept-check: ignore'를 쓰면 그 줄은 건너뜀.",
+  "official_name": {
+    "full": "민주평화통일자문회의",
+    "short": "민주평통",
+    "wrong": [
+      "민주평화통일위원회",
+      "민주평화통일 자문회의",
+      "민주평통자문회의",
+      "평통자문회의",
+      "민주평화자문회의"
+    ]
+  },
+  "political_terms": [
+    "더불어민주당",
+    "국민의힘",
+    "조국혁신당",
+    "개혁신당",
+    "진보당",
+    "정의당",
+    "기본소득당",
+    "사회민주당",
+    "정권 심판",
+    "규탄",
+    "종북",
+    "친북",
+    "빨갱이",
+    "토착왜구",
+    "수꼴",
+    "좌빨",
+    "퍼주기"
+  ],
+  "hype_terms": [
+    "최고의",
+    "최초의",
+    "국내 최대",
+    "유일한",
+    "유일무이",
+    "100% 보장",
+    "무조건",
+    "완벽한",
+    "압도적",
+    "역대급",
+    "1위"
+  ],
+  "paid_terms": [
+    "Blaze",
+    "종량제 요금",
+    "유료 요금제",
+    "api.openai.com",
+    "OpenAI API",
+    "generativelanguage.googleapis.com",
+    "Cloud Functions",
+    "유료 API"
+  ],
+  "paid_terms_negations": [
+    "금지",
+    "사용하지",
+    "쓰지 않",
+    "지양",
+    "없음",
+    "않음",
+    "불필요",
+    "0원",
+    "무료",
+    "필요 없"
+  ],
+  "estimate_markers": [
+    "(안)",
+    "추정",
+    "확인 필요",
+    "예정",
+    "잠정"
+  ],
+  "allowed_emails": [
+    "todaklife@gmail.com",
+    "noreply@anthropic.com"
+  ],
+  "allowed_phones": [
+    "010-0000-0000",
+    "010-1234-5678"
+  ],
+  "logo_name_patterns": [
+    "symbol",
+    "signature",
+    "emblem",
+    "logo",
+    "심벌",
+    "엠블럼",
+    "시그니처",
+    "로고"
+  ],
+  "logo_skip_patterns": [
+    "icon-",
+    "splash",
+    "ic_launcher",
+    "favicon"
+  ],
+  "official_logo_ratios": {
+    "2색조합 심벌_a": 1.0169,
+    "2색조합 심벌_b": 0.983,
+    "엠블럼·단색 심벌": 1.0174,
+    "단색형 심벌_a": 1.0164,
+    "국·영문 시그니처 상하_a": 1.2856,
+    "국·영문 시그니처 좌우(중앙)": 4.0023,
+    "국·영문 시그니처 좌우(하단)": 4.2825,
+    "국문 시그니처 상하_a": 1.7776,
+    "국문 시그니처 상하_b": 1.5217,
+    "국문 시그니처 좌우": 5.0094,
+    "국문 가로형 로고타입": 5.4974,
+    "국문 세로형 로고타입": 0.192
+  },
+  "logo_ratio_tolerance": 0.03,
+  "logo_forbidden_css": [
+    "rotate",
+    "skew",
+    "filter",
+    "hue-rotate",
+    "animation",
+    "perspective",
+    "rotateY",
+    "rotateX"
+  ],
+  "exclude_dirs": [
+    "node_modules",
+    ".git",
+    "android",
+    "ios",
+    "vendor",
+    "build",
+    "dist",
+    ".claude",
+    "departments",
+    "tests"
+  ],
+  "exclude_files": [
+    "CLAUDE.md",
+    "dept_rules.json",
+    "dept_check.py",
+    "package-lock.json"
+  ],
+  "doc_exts": [
+    ".md",
+    ".txt",
+    ".html",
+    ".htm",
+    ".docx"
+  ],
+  "code_exts": [
+    ".js",
+    ".mjs",
+    ".css",
+    ".json",
+    ".rules"
+  ],
+  "image_exts": [
+    ".png",
+    ".jpg",
+    ".jpeg"
+  ],
+  "logo_warn_css": [
+    "box-shadow",
+    "drop-shadow",
+    "text-shadow"
+  ],
+  "budget_money_threshold": 5,
+  "hype_negations": [
+    "금지",
+    "쓰지 않",
+    "사용하지",
+    "제외",
+    "지양"
+  ]
+}

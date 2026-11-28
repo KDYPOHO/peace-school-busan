@@ -167,7 +167,7 @@ test('Chromium과 WebKit에서 참가자 신청, 문의 답변, 읽음 상태를
   await appleStaff.page.locator('#roleA').click();
 
   await appleStaff.page.locator('[data-tab=people]').click();
-  await appleStaff.page.getByRole('button', { name: '가입 승인', exact: true }).click();
+  await appleStaff.page.getByRole('button', { name: '승인', exact: true }).click();
   await appleStaff.page.getByRole('button', { name: '승인하기', exact: true }).click();
   await Promise.all([android.page, apple.page].map(page => page.locator('[data-tab=att]').waitFor()));
   t.diagnostic('새 계정은 두 앱에서 대기하고 운영진 승인 한 번으로 두 앱에서 입장됨');

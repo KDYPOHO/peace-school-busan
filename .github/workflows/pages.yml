@@ -22,9 +22,14 @@ jobs:
       - run: npm run build:web
         env:
           PSB_BUILD_MODE: production
+      - run: mkdir -p _site && cp -R www/. _site/
+      # 간담회 시연용: 서버 연결 없이 가상 자료로만 동작하는 사본 (/demo/)
+      - run: npm run build:web && mkdir -p _site/demo && cp -R www/. _site/demo/
+        env:
+          PSB_BUILD_MODE: demo
       - uses: actions/configure-pages@v5
         with: { enablement: true }
       - uses: actions/upload-pages-artifact@v3
-        with: { path: www }
+        with: { path: _site }
       - id: d
         uses: actions/deploy-pages@v4

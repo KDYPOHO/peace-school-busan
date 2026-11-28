@@ -1,6 +1,7 @@
 import { DEEP, DEEP_APPLY_UNTIL, LECTURES } from "./config.js";
 import { deleteAccountInOrder } from "./account-deletion.js";
 import { lectureWindow } from "./course.js";
+import { DEMO_ACCOUNTS, DEMO_NOW, demoSeed } from "./demo-seed.js";
 
 const unavailable = () => Object.assign(new Error("Firebase configuration or connection unavailable"), { code: "unavailable" });
 export function isApprovedProfile(profile) {
@@ -16,6 +17,12 @@ export async function keepFirstAnswer(save, readCurrent) {
     if (error.code === "permission-denied" && (await readCurrent()).data()?.answer) return false;
     throw error;
   }
+}
+// 운영진 역할: admin(관리자) / staff(운영진) / judge(심사위원). role이 없는 기존 문서는 관리자
+export const STAFF_ROLES = { admin: "관리자", staff: "운영진", judge: "심사위원" };
+export function staffRoleOf(record) {
+  if (!record) return "";
+  return Object.prototype.hasOwnProperty.call(STAFF_ROLES, record.role || "admin") ? record.role || "admin" : "";
 }
 export const isNative = typeof window !== "undefined" && window.Capacitor?.isNativePlatform?.() === true;
 
@@ -128,9 +135,11 @@ async function firebaseBackend(settings, emulator) {
       });
     },
 
-    async isStaff() {
-      return (await read(doc(db, "staff", api.user.uid))).exists();
+    async staffRole() {
+      const snap = await read(doc(db, "staff", api.user.uid));
+      return snap.exists() ? staffRoleOf(snap.data()) : "";
     },
+    async isStaff() { return ["admin", "staff"].includes(await api.staffRole()); },
     async getProfile() {
       const s = await read(doc(db, "users", api.user.uid));
       return s.exists() ? { id: s.id, ...s.data() } : null;
@@ -151,16 +160,26 @@ async function firebaseBackend(settings, emulator) {
         return { ...data, consentAt: Date.now(), createdAt: Date.now() };
       });
     },
-    async approveProfile(uid) {
+    // 가입 결정: approved(승인) / rejected(반려) / hold(보류). 대기·보류 상태에서만 바꿀 수 있음
+    async decideProfile(uid, status, { note = "", waitlist = false } = {}) {
       ensureOnline();
       const ref = doc(db, "users", uid), approvedBy = api.user.uid;
       return transaction(async tx => {
         const profile = (await tx.get(ref)).data();
-        if (profile?.approvalStatus !== "pending") return false;
-        tx.update(ref, { approvalStatus: "approved", approvedAt: ts(), approvedBy });
+        if (!["pending", "hold"].includes(profile?.approvalStatus)) return false;
+        const change = { approvalStatus: status, approvedAt: ts(), approvedBy, approvalNote: String(note).slice(0, 100) };
+        if (status === "approved" && waitlist) change.onsiteWaitlist = true;
+        tx.update(ref, change);
         return true;
       });
     },
+    approveProfile(uid) { return api.decideProfile(uid, "approved"); },
+    async setOnsiteWaitlist(uid, waitlist) { await updateDoc(doc(db, "users", uid), { onsiteWaitlist: waitlist }); },
+    async setParticipantMode(uid, mode) { await updateDoc(doc(db, "users", uid), { mode, onsiteWaitlist: false }); },
+    watchOnsiteStats(cb) {
+      return onSnapshot(doc(db, "stats", "onsite"), snap => cb(snap.data() || null), () => cb(null));
+    },
+    async publishOnsiteStats(stat) { await setDoc(doc(db, "stats", "onsite"), { ...stat, at: ts() }); },
     async updateProfile(p) { await updateDoc(doc(db, "users", api.user.uid), { ...p, updatedAt: ts() }); },
 
     watchMyAttendance(cb) {
@@ -296,25 +315,39 @@ async function firebaseBackend(settings, emulator) {
     },
 
     watchStaff(cb) { return onSnapshot(collection(db, "staff"), s => cb(rows(s)), () => cb([])); },
-    async addStaff(uid, label) { await setDoc(doc(db, "staff", uid), { label, at: ts(), by: api.user.uid }); },
+    async addStaff(uid, label, role = "staff") { await setDoc(doc(db, "staff", uid), { label, role, at: ts(), by: api.user.uid }); },
+    async setStaffRole(uid, role) { await updateDoc(doc(db, "staff", uid), { role }); },
     async removeStaff(uid) { await deleteDoc(doc(db, "staff", uid)); }
   };
   return api;
 }
 
 /* ───────────────────────── Demo (localStorage) ───────────────────────── */
-function demoBackend() {
-  const KEY = "psb_demo_v1";
+// seeded = 간담회 시연용(가상 자료 + 시연 시각 고정). 아니면 빈 체험 모드
+function demoBackend({ seeded = false } = {}) {
+  const KEY = seeded ? "psb_demo_seed_v1" : "psb_demo_v1";
   const listeners = new Set();
   let D;
-  const blank = () => ({ me: null, staff: {}, users: {}, attendance: {}, deepApps: {}, notices: [], questions: [], scores: {} });
+  const blank = () => seeded ? demoSeed() : ({ me: null, staff: {}, users: {}, attendance: {}, deepApps: {}, notices: [], questions: [], scores: {} });
   try { D = JSON.parse(localStorage.getItem(KEY)) || blank(); } catch (e) { D = blank(); }
+  if (seeded) {
+    // 시연 시각: 2027. 5. 15. 14:20(3강 진행 중)부터 실제 시간만큼 흐름
+    const realNow = Date.now.bind(Date), began = realNow();
+    Date.now = () => DEMO_NOW + (realNow() - began);
+  }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) {} listeners.forEach(f => f()); };
   const sub = fn => { listeners.add(fn); fn(); return () => listeners.delete(fn); };
   let authCb = null;
   const api = {
     mode: "demo",
-    environment: "development",
+    environment: seeded ? "demo" : "development",
+    seeded,
+    // 시연: 역할별 가상 계정으로 바로 들어감
+    async enterDemo(role) {
+      const account = DEMO_ACCOUNTS[role]; if (!account) return;
+      D.me = { ...account }; api.user = D.me; save(); authCb && authCb(api.user);
+    },
+    resetDemo() { try { localStorage.removeItem(KEY); } catch (e) {} D = blank(); D.me = null; api.user = null; save(); authCb && authCb(null); },
     user: null,
     canGoogle: false,
     onAuth(cb) { authCb = cb; api.user = D.me; setTimeout(() => cb(api.user), 0); return () => {}; },
@@ -324,7 +357,8 @@ function demoBackend() {
     async signOut() { D.me = null; api.user = null; save(); authCb && authCb(null); },
     accountDeletionMethod() { return 'demo'; },
     async deleteAccount() { for (const k of Object.keys(D.attendance)) if (D.attendance[k].uid === D.me.uid) delete D.attendance[k]; D.questions = D.questions.filter(q => q.uid !== D.me.uid); delete D.users[D.me.uid]; delete D.deepApps[D.me.uid]; if (D.reads) delete D.reads[D.me.uid]; return api.signOut(); },
-    async isStaff() { return !!D.staff[api.user.uid]; },
+    async staffRole() { return staffRoleOf(D.staff[api.user.uid]); },
+    async isStaff() { return ["admin", "staff"].includes(await api.staffRole()); },
     async getProfile() { return D.users[api.user.uid] || null; },
     watchOwnProfile(cb) {
       const uid = api.user.uid;
@@ -339,12 +373,17 @@ function demoBackend() {
       save();
       return D.users[api.user.uid];
     },
-    async approveProfile(uid) {
-      if (!D.staff[api.user.uid] || D.users[uid]?.approvalStatus !== "pending") return false;
-      Object.assign(D.users[uid], { approvalStatus: "approved", approvedAt: Date.now(), approvedBy: api.user.uid });
+    async decideProfile(uid, status, { note = "", waitlist = false } = {}) {
+      if (!["admin", "staff"].includes(staffRoleOf(D.staff[api.user.uid])) || !["pending", "hold"].includes(D.users[uid]?.approvalStatus)) return false;
+      Object.assign(D.users[uid], { approvalStatus: status, approvedAt: Date.now(), approvedBy: api.user.uid, approvalNote: String(note).slice(0, 100) }, status === "approved" && waitlist ? { onsiteWaitlist: true } : {});
       save();
       return true;
     },
+    approveProfile(uid) { return api.decideProfile(uid, "approved"); },
+    async setOnsiteWaitlist(uid, waitlist) { D.users[uid].onsiteWaitlist = waitlist; save(); },
+    async setParticipantMode(uid, mode) { Object.assign(D.users[uid], { mode, onsiteWaitlist: false }); save(); },
+    watchOnsiteStats(cb) { return sub(() => cb(D.onsiteStats || null)); },
+    async publishOnsiteStats(stat) { D.onsiteStats = { ...stat, at: Date.now() }; save(); },
     async updateProfile(p) { Object.assign(D.users[api.user.uid], p, { updatedAt: Date.now() }); save(); },
     watchMyAttendance(cb) { return sub(() => cb(Object.entries(D.attendance).filter(([, a]) => a.uid === api.user?.uid).map(([id, a]) => ({ id, ...a })))); },
     async checkInOnline(n) { D.attendance[`${n}_${api.user.uid}`] = { uid: api.user.uid, lecture: n, method: "online", at: Date.now() }; save(); },
@@ -399,7 +438,8 @@ function demoBackend() {
     watchScores(round, cb) { return sub(() => cb(Object.entries(D.scores).filter(([, s]) => s.round === round).map(([id, s]) => ({ id, ...s })))); },
     async saveScore(round, team, crit) { D.scores[`${round}_${team}_${api.user.uid}`] = { round, team, crit, judge: api.user.uid, at: Date.now() }; save(); },
     watchStaff(cb) { return sub(() => cb(Object.entries(D.staff).map(([id, s]) => ({ id, ...s })))); },
-    async addStaff(uid, label) { D.staff[uid] = { label }; save(); },
+    async addStaff(uid, label, role = "staff") { D.staff[uid] = { label, role }; save(); },
+    async setStaffRole(uid, role) { D.staff[uid].role = role; save(); },
     async removeStaff(uid) { delete D.staff[uid]; save(); }
   };
   return api;
@@ -414,6 +454,7 @@ export async function createBackend() {
   if (settings.mode === "staging" && settings.firebase?.projectId && settings.firebase.projectId !== "kdypoho") {
     return firebaseBackend(settings);
   }
+  if (settings.mode === "demo") return demoBackend({ seeded: true });
   if (settings.mode === "development") {
     const query = new URLSearchParams(location.search);
     const target = query.get("emulator");
@@ -423,6 +464,7 @@ export async function createBackend() {
       }, target);
     }
     if (query.get("demo") === "1") return demoBackend();
+    if (query.get("demo") === "seed") return demoBackend({ seeded: true });
   }
   throw unavailable();
 }

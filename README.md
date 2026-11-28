@@ -19,6 +19,10 @@
 | 수료증 (수료식 날 자동 발급, 인쇄·PDF) | 해커톤 심사 실시간 집계 |
 | 큰 글씨, 밝게/어둡게, 회원 탈퇴 | 참가자 수동 출결, CSV 명단, 결과보고서 초안 |
 
+## 7개 부서 검수 체계
+
+계획안·누리집·앱·홍보물을 총괄 지침(`CLAUDE.md`) 기준으로 7개 부서(개발, 디자인, 홍보, 소셜·기록, 재무, 대외협력·운영, 법무·감사)가 차례로 검수합니다. Claude Code에서 `/dept-review <대상>`, 새 산출물은 `/dept-produce <산출물>`, 무료 자동 점검은 `python3 scripts/dept_check.py`. 자세한 내용은 [docs/departments/README.md](docs/departments/README.md).
+
 ## 폴더
 
 ```

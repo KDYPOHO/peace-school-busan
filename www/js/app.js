@@ -850,7 +850,7 @@ function deepForm() {
     <label class="f">관심 분야<select id="dTheme">${["교육·콘텐츠", "지역 연계", "국제·외교", "미디어", "사회 통합", "기타"].map(t => `<option ${a.theme === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
     <label class="f">해커톤에서 해보고 싶은 것 (100~800자)<textarea id="dEssay" rows="5" maxlength="800" required>${esc(a.essay || "")}</textarea></label>
     <div class="small muted" id="dCnt" style="text-align:right;margin-top:-6px">0자</div>
-    <label class="f">부산 도착 예정<select id="dArr">${["8. 13.(금) 11시 이전 도착", "8. 13.(금) 11시~12시 도착", "부산·경남 거주 (직접 이동)", "아직 모름"].map(t => `<option ${a.arrival === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+    <label class="f">부산 도착 예정<select id="dArr">${["8. 13.(금) 11시 집결 전 도착", "8. 13.(금) 11시 이후 도착 (늦게 합류)", "부산·경남 거주 (직접 이동)", "아직 모름"].map(t => `<option ${a.arrival === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
     ${S.deepApp ? "" : '<label class="check"><input type="checkbox" id="dOk"> 2박3일 전 일정에 참여할 수 있으며, 선발 후 불참 시 다음 예비자에게 기회가 넘어가는 데 동의합니다.</label>'}
     <p class="err" id="dErr" role="alert"></p>
     <button class="btn" type="submit">${S.deepApp ? "고친 내용 저장" : "지원서 제출"}</button>

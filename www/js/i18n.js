@@ -378,8 +378,8 @@ const EN = {
   "기타": "Other",
   "해커톤에서 해보고 싶은 것 (100~800자)": "What you'd like to try at the hackathon (100–800 characters)",
   "부산 도착 예정": "Arrival in Busan",
-  "8. 13.(금) 11시 이전 도착": "Before 11:00 on Fri 8/13",
-  "8. 13.(금) 11시~12시 도착": "11:00–12:00 on Fri 8/13",
+  "8. 13.(금) 11시 집결 전 도착": "Before the 11:00 meet-up on Fri 8/13",
+  "8. 13.(금) 11시 이후 도착 (늦게 합류)": "After 11:00 on Fri 8/13 (joining late)",
   "부산·경남 거주 (직접 이동)": "Live in Busan/Gyeongnam (own travel)",
   "아직 모름": "Not sure yet",
   "2박3일 전 일정에 참여할 수 있으며, 선발 후 불참 시 다음 예비자에게 기회가 넘어가는 데 동의합니다.": "I can attend all 3 days, and agree my place goes to the next waitlisted person if I drop out.",
@@ -583,7 +583,7 @@ const RULES = [
 
 // 일정·도우미·운영 화면에 더 쓰이는 문구
 Object.assign(EN, {
-  "12:00 부산역 집결·등록": "12:00 Meet and register at Busan Station",
+  "11:00 부산역 집결·등록": "11:00 Meet and register at Busan Station",
   "13:00 현장교육 (재한유엔기념공원 외, 조별 2곳)": "13:00 Field study (UN Memorial Cemetery and more, 2 sites per group)",
   "16:30 숙소 체크인 및 휴식": "16:30 Check in and rest",
   "19:30 개회식": "19:30 Opening ceremony",

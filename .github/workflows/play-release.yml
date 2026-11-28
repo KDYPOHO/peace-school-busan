@@ -1,0 +1,71 @@
+name: Google Play 업로드용 서명 AAB
+# 태그 play-v<버전>-<버전코드> (예: play-v1.4.0-49)를 올리면 운영 설정으로 서명된 AAB를 만든다.
+# 업로드 키는 저장소 Secrets에만 둔다: ANDROID_UPLOAD_KEYSTORE_B64, ANDROID_UPLOAD_STORE_PASSWORD,
+# ANDROID_UPLOAD_KEY_ALIAS, ANDROID_UPLOAD_KEY_PASSWORD. Play Console 업로드는 사람이 한다.
+on:
+  push:
+    tags: ["play-v*"]
+permissions:
+  contents: write
+jobs:
+  signed-aab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21, cache: gradle }
+      - name: Maven Central 대신 Google 미러 사용
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/mirror.gradle <<'G'
+          def MIRROR = "https://maven-central.storage-download.googleapis.com/maven2/"
+          def swap = { RepositoryHandler repos ->
+            repos.withType(MavenArtifactRepository).configureEach { r ->
+              if (r.url.toString().startsWith("https://repo.maven.apache.org")) r.url = MIRROR
+            }
+          }
+          settingsEvaluated { s -> swap(s.pluginManagement.repositories) }
+          allprojects { p -> swap(p.buildscript.repositories); swap(p.repositories) }
+          G
+      - name: 태그에서 버전 읽기
+        id: v
+        run: |
+          TAG="${GITHUB_REF_NAME#play-v}"
+          NAME="${TAG%-*}"; CODE="${TAG##*-}"
+          echo "$CODE" | grep -Eq '^[0-9]+$' || { echo "태그 형식: play-v1.4.0-49"; exit 1; }
+          grep -q "versionName '$NAME'" android/app/build.gradle || { echo "build.gradle versionName이 $NAME 이 아님"; exit 1; }
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"; echo "code=$CODE" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:web
+        env: { PSB_BUILD_MODE: production }
+      - run: npx cap sync android
+      - name: 업로드 키로 서명한 AAB 빌드
+        working-directory: android
+        env:
+          KEY_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_B64 }}
+          ANDROID_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          ANDROID_VERSION_CODE: ${{ steps.v.outputs.code }}
+        run: |
+          [ -n "$KEY_B64" ] || { echo "Secrets에 업로드 키가 없습니다"; exit 1; }
+          KS="$RUNNER_TEMP/upload.jks"; echo "$KEY_B64" | base64 -d > "$KS"
+          export ANDROID_UPLOAD_KEYSTORE="$KS"
+          chmod +x gradlew && ./gradlew bundleRelease --no-daemon
+          rm -f "$KS"
+      - name: 서명과 웹 파일 확인
+        run: |
+          AAB=android/app/build/outputs/bundle/release/app-release.aab
+          jarsigner -verify "$AAB" | tail -1
+          keytool -printcert -jarfile "$AAB" | grep -E "SHA256|Owner" | head -2
+          python3 scripts/verify_web_assets.py "$AAB" production
+          cp "$AAB" "hanbando-peace-school-${{ steps.v.outputs.name }}-${{ steps.v.outputs.code }}.aab"
+      - name: 받을 수 있게 비공개 초안 릴리스에 첨부
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          F="hanbando-peace-school-${{ steps.v.outputs.name }}-${{ steps.v.outputs.code }}.aab"
+          gh release create "$GITHUB_REF_NAME" "$F" --draft --title "Play 내부 테스트 ${{ steps.v.outputs.name }} (${{ steps.v.outputs.code }})" --notes "Play Console 내부 테스트에 올릴 서명 AAB. 운영 Firebase 설정."

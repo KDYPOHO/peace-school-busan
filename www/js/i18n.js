@@ -134,6 +134,8 @@ const EN = {
   "국내": "Korea",
   "해외": "Overseas",
   "체험 모드": "demo mode",
+  "인터넷이 없어도 입구에서 이 QR을 보여 주면 돼요.": "Show this QR at the entrance even without internet.",
+  "같은 수강번호가 여러 명이에요. QR로 출석하거나 참가자 탭에서 이름을 눌러 처리해 주세요.": "Several people share this number. Use their QR, or tap their name in Participants.",
   "부산 청년 과정": "Busan Youth Course",
   "2027 부산 청년 과정 기본과정": "2027 Busan Youth Course · Basic",
   "실시간 순위": "Live ranking",
@@ -620,7 +622,7 @@ Object.assign(EN, {
   "현장에서는 출석 탭의 내 QR을 입구 운영진에게 보여 주면 바로 기록돼요. 휴대폰이 없으면 수강번호를 말해 주세요.": "In person, show your QR on the Attendance tab to staff at the entrance. Without a phone, tell them your enrollment number.",
   "수료 요건을 채우면 수료식 날 내 정보 탭에 수료증이 발급되고, 인쇄하거나 PDF로 저장할 수 있어요.": "Once you meet the requirement, your certificate appears in My info on the ceremony day. You can print it or save it as PDF.",
   "기본과정 강의는 모두 끝났어요. 심화과정 일정은 일정 탭에서 볼 수 있어요.": "All basic sessions are finished. See the advanced course in Schedule.",
-  "재한유엔기념공원은 세계 유일의 유엔군 묘지로 부산 남구에 있어요. 심화과정 1일차 현장교육 장소 중 하나예요.": "The UN Memorial Cemetery in Korea, in Nam-gu, Busan, is the world's only UN military cemetery. It's a field-study site on day 1 of the advanced course.",
+  "재한유엔기념공원은 부산 남구에 있는 유엔군 묘지로, 6·25전쟁에 참전한 유엔군 장병이 잠들어 있어요. 심화과정 1일차 현장교육 장소 중 하나예요.": "The UN Memorial Cemetery in Korea, in Nam-gu, Busan, is where UN soldiers who served in the Korean War rest. It's a field-study site on day 1 of the advanced course.",
   "민주평통 청년운영위원회의 청년아카이브(youtharchive.kr)에서 행사 기록과 활동을 볼 수 있어요. 홈 화면 아래에 바로가기가 있어요.": "See event records and activities at the NUAC Youth Archive (youtharchive.kr). There's a shortcut at the bottom of Home.",
   "내 정보 탭에서 정보 수정, 개인정보 처리 안내, 회원 탈퇴를 할 수 있어요.": "In My info you can edit your details, read the privacy notice and delete your account.",
   "평화학교 도우미는 정치적 중립을 지키기 위해 특정 정당이나 인물에 대한 의견을 답하지 않아요. 강의나 운영 안내를 물어봐 주세요.": "To stay politically neutral, the helper doesn't give opinions on parties or people. Please ask about sessions or logistics.",
@@ -784,7 +786,8 @@ function translateNode(root) {
   if (root.nodeType === 3) {
     const p = root.parentElement;
     if (p && !SKIP.has(p.tagName) && !p.closest("[data-noi18n]")) {
-      const t = tr(root.nodeValue);
+      // 34px 원형 칸 안의 "1강"은 숫자만 남긴다 (영문 "Session 1"은 칸을 넘친다)
+      const t = p.classList && p.classList.contains("dot") && /^\s*\d+강\s*$/.test(root.nodeValue) ? root.nodeValue.replace("강", "") : tr(root.nodeValue);
       if (t !== root.nodeValue) {
         // value가 없는 option은 글자가 곧 값이므로, 바꾸기 전에 원래 값을 고정한다
         if (p.tagName === "OPTION" && !p.hasAttribute("value")) p.setAttribute("value", p.textContent);

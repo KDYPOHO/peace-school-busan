@@ -11,6 +11,7 @@ const TERMS = ["제22기", "제21기"];
 const memberLabel = u => !u || !u.memberType ? "-" : u.memberType !== "자문위원" ? u.memberType : u.memberVerified === "verified" ? ("자문위원 " + (u.memberTerm || "") + " · 인증됨").replace("  ", " ") : u.memberVerified === "rejected" ? "자문위원 · 인증 반려" : "자문위원 · 인증 대기";
 const isPendingMember = u => u.memberType === "자문위원" && u.memberVerified !== "verified" && u.memberVerified !== "rejected";
 const memberFields = (d, px) => d.memberType !== "자문위원" ? "" : `<div class="row" style="gap:8px"><label class="f" style="flex:1">자문위원 기수<select id="${px}Term">${TERMS.map(t => `<option ${d.memberTerm === t ? "selected" : ""}>${t}</option>`).join("")}</select></label><label class="f" style="flex:1.4">위촉 번호 (선택)<input id="${px}MemNo" maxlength="20" value="${esc(d.memberNo || "")}" placeholder="위촉장 번호"></label></div><p class="small muted" style="margin:-4px 0 4px">자문위원은 운영진이 명단과 대조해 인증한 뒤 '인증됨'으로 표시돼요. 그전까지는 '인증 대기'예요.</p>`;
+import { initCompat } from "./compat.js";
 import { initI18n, langChips, toHelperQuery, currentLang } from "./i18n.js";
 import { privacyHtml, termsHtml, permissionsHtml, consentTable, CONSENT_REQUIRED, CONSENT_OPTIONAL, CONSENT_PHOTO } from "./legal.js";
 
@@ -1323,7 +1324,9 @@ const BIND = {
       const form = e.currentTarget, field = $("#manualNo"), button = form.querySelector("button");
       if (button.disabled) return;
       const no = field.value.trim().toUpperCase();
-      const u = S.users.find(x => String(x.no).toUpperCase() === no);
+      const found = S.users.filter(x => String(x.no).toUpperCase() === no);
+      if (found.length > 1) { showScanResult("같은 수강번호가 여러 명이에요. QR로 출석하거나 참가자 탭에서 이름을 눌러 처리해 주세요.", "warn"); return; }
+      const u = found[0];
       if (!u) { showScanResult("수강번호를 찾지 못했어요. 번호를 확인해 주세요.", "warn"); return; }
       button.disabled = true;
       const revision = S.scanRevision || 0;
@@ -1497,6 +1500,8 @@ async function onSignedIn(u) {
     const deepApp = isApprovedProfile(profile) || (staff && profile) ? await B.getDeepApp() : null;
     if (S.user?.uid !== u.uid) return;
     Object.assign(S, { profile, staff, deepApp });
+    // 통신이 약한 현장에서도 QR 수강증을 띄울 수 있도록 이름과 수강번호만 기기에 남긴다
+    try { if (isApprovedProfile(profile)) localStorage.setItem("psb_pass", JSON.stringify({ uid: u.uid, name: profile.name, no: profile.no })); } catch (e) {}
   } catch {
     if (S.user?.uid === u.uid) connectionError(() => onSignedIn(u));
     return;
@@ -1566,13 +1571,20 @@ window.addEventListener("online", offlineBanner); window.addEventListener("offli
 
 function connectionError(retry) {
   $("#splash")?.remove();
+  let pass = null;
+  try { pass = JSON.parse(localStorage.getItem("psb_pass") || "null"); } catch (e) {}
+  if (!pass || !S.user || pass.uid !== S.user.uid) pass = null;
   $("#root").innerHTML = `<div class="auth"><section class="card"><h2>서버에 연결하지 못했어요</h2>
     <p class="small muted">인터넷 연결을 확인한 뒤 다시 시도해 주세요.</p>
-    <button class="btn block" id="retryConnection">다시 시도</button></section></div>`;
+    <button class="btn block" id="retryConnection">다시 시도</button></section>
+    ${pass ? `<section class="card" style="text-align:center"><h2 style="margin:0 0 4px">QR 수강증</h2><p class="small muted" style="margin:0 0 10px">인터넷이 없어도 입구에서 이 QR을 보여 주면 돼요.</p>
+      <div class="qr qr-pass" role="img" aria-label="출석용 QR 수강증">${qrSvg("PSB1:" + pass.uid)}</div>
+      <p style="margin:10px 0 0"><b data-noi18n>${esc(pass.name)}</b> · ${esc(pass.no)}</p></section>` : ""}</div>`;
   $("#retryConnection").onclick = retry;
 }
 
 async function boot() {
+  initCompat();
   initI18n();
   $("#root").innerHTML = '<div class="auth"><p class="note" role="status">서버 연결 중…</p></div>';
   try {
@@ -1602,7 +1614,7 @@ async function boot() {
       myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpRequest: null, helpSending: false,
       answerDrafts: {}, answerErrors: {}, answerSending: new Set(), helpFilter: "open", helpLimit: 25
     });
-    if (u) await onSignedIn(u); else renderAuth();
+    if (u) await onSignedIn(u); else { try { localStorage.removeItem("psb_pass"); } catch (e) {} renderAuth(); }
     finishSplash();
   });
   offlineBanner();

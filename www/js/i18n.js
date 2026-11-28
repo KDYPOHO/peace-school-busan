@@ -9,6 +9,10 @@ const store = {
 };
 
 export function currentLang() {
+  // 주소에 ?lang=ko 또는 ?lang=en 이 있으면 그 언어로 고정 (시험·안내 링크용)
+  let q = null;
+  try { q = new URLSearchParams(location.search).get("lang"); } catch (e) {}
+  if (q === "ko" || q === "en") { if (store.get() !== q) store.set(q); return q; }
   const saved = store.get();
   if (saved === "ko" || saved === "en") return saved;
   const nav = (navigator.languages && navigator.languages[0]) || navigator.language || "ko";

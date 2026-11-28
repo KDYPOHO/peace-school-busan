@@ -18,6 +18,7 @@
     "@capacitor/android": "^7.4.0",
     "@capacitor/core": "^7.4.0",
     "@capacitor/ios": "^7.4.0",
+    "@capacitor/local-notifications": "^7.0.7",
     "firebase": "11.10.0",
     "html5-qrcode": "2.3.8",
     "qrcode-generator": "1.4.4"

@@ -18,7 +18,7 @@ if (mode === 'production') {
     throw new Error('Set the approved isolated project ID and matching Firebase Web configuration.');
   }
   settings = { mode, firebase: config };
-} else if (!['locked', 'development'].includes(mode)) {
+} else if (!['locked', 'development', 'demo'].includes(mode)) {
   throw new Error('Unsupported build mode.');
 } else if (mode === 'development') {
   settings = { mode, emulatorProject: fixtureProject };

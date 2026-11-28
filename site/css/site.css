@@ -136,6 +136,10 @@ button{font:inherit;color:inherit}
 .quick a:hover{color:var(--sea)}
 .quick svg{width:36px;height:36px;color:var(--navy);transition:transform .25s var(--out)}
 .quick a:hover svg{transform:translateY(-3px)}
+/* 아이콘 선 그리기: 누르기 전 마우스·키보드 초점에 한 번만 (동작 줄이기 설정 시 생략) */
+.quick a:hover svg>*,.quick a:focus-visible svg>*{stroke-dasharray:1;animation:qdraw .7s var(--out) both}
+@keyframes qdraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){.quick a:hover svg>*,.quick a:focus-visible svg>*{animation:none}}
 .quick small{font-weight:500;font-size:14px;color:var(--ink-3);margin-top:-6px}
 @media (max-width:860px){.quick{margin-top:0;padding-top:24px}.quick ul{grid-template-columns:repeat(3,1fr)}.quick li:nth-child(4){border-left:0}.quick li:nth-child(n+4){border-top:1px solid var(--line-2)}}
 

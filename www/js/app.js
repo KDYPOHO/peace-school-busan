@@ -1,9 +1,10 @@
 import qrcode from "qrcode-generator";
 // 한반도 평화학교 앱 (참가자 + 운영진)
 import { APP, LECTURES, VENUE, PASS_COUNT, ONSITE_CAP, DEEP, TEAMS, CRITERIA, REGIONS, DEEP_STATUS } from "./config.js";
-import { createBackend, isApprovedProfile, isNative, newRequestId } from "./backend.js";
+import { createBackend, isApprovedProfile, isNative, newRequestId, STAFF_ROLES } from "./backend.js";
 import { countedLectures, deepDeadlineLabel, lectureWindow, onlineOpenAt, scheduledLectures } from "./course.js";
 import { faqAnswer, FAQ_CHIPS } from "./faq.js";
+import { remindersAvailable, enableReminders, disableReminders, syncReminders } from "./reminders.js";
 import { ORG_ROOT, REGION_COUNCILS, DOMESTIC, OVERSEAS, NONE as ORG_NONE, affiliationLabel, affiliationFull } from "./councils.js";
 const MEMBER_TYPES = ["자문위원", "청년 서포터즈·추천 청년", "일반 청년"];
 const TERMS = ["제22기", "제21기"];
@@ -65,10 +66,35 @@ function confirmSheet(title, body, okLabel, danger) {
 
 /* ───────── 날짜 (한국 시간 기준) ───────── */
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+// 참가자 신청서가 없는 운영진·심사위원 계정은 '내 정보' 탭이 없으므로 운영 화면에 로그아웃을 둠
+const consoleOutCard = () => S.profile ? "" : `<section class="card"><div class="row between"><span class="small muted">${esc(S.user?.email || "")}</span><button class="btn ghost mini" type="button" data-console-out>로그아웃</button></div></section>`;
+document.addEventListener("click", async e => {
+  if (!e.target.closest?.("[data-console-out]")) return;
+  if (await confirmSheet("로그아웃할까요?", B.seeded ? "시연 첫 화면으로 돌아가요." : "다시 들어오려면 이메일과 비밀번호가 필요해요.", "로그아웃")) B.signOut();
+});
+// 반려·보류 사유 고르기 (자유 입력 대신 정해진 문구: 개인정보·표현 점검 부담을 줄임)
+function pickReason(title, reasons) {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = v => { if (done) return; done = true; closeSheet(); resolve(v); };
+    sheet(`<h2 style="margin:0 0 8px;font-size:1.05rem">${esc(title)}</h2><p class="small muted" style="margin:0 0 10px">신청자 화면에 보일 사유를 골라 주세요.</p><div class="list">${reasons.map((r, i) => `<button class="li" type="button" data-reason="${i}" style="width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0;cursor:pointer"><div class="body">${esc(r)}</div></button>`).join("")}</div><button class="btn ghost block" type="button" id="reasonCancel" style="margin-top:10px">취소</button>`, () => finish(null));
+    $$("[data-reason]").forEach(b => (b.onclick = () => finish(reasons[+b.dataset.reason])));
+    $("#reasonCancel").onclick = () => finish(null);
+  });
+}
 const kstNow = () => new Date(Date.now() + 9 * 3600e3);
 const todayStr = () => kstNow().toISOString().slice(0, 10);
 function fmtDate(iso) { const [y, m, d] = iso.split("-").map(Number); const w = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); return `${y}. ${m}. ${d}.(${DOW[w]})`; }
 function fmtTime(ms) { if (!ms) return ""; const d = new Date(ms + 9 * 3600e3); return `${d.getUTCMonth() + 1}. ${d.getUTCDate()}. ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`; }
+// 해외 참가자: 기기 시간대가 한국과 다르면 현지 시각을 함께 보여 줌
+function localTimeNote(l) {
+  try {
+    const start = lectureWindow(l).start;
+    if (-new Date(start).getTimezoneOffset() === 540) return "";
+    const d = new Date(start), hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    return currentLang() === "en" ? ` (local ${d.getMonth() + 1}/${d.getDate()} ${hm})` : ` (현지 ${d.getMonth() + 1}. ${d.getDate()}. ${hm})`;
+  } catch { return ""; }
+}
 function lectureState(l) { const t = todayStr(); return l.date < t ? "past" : l.date === t ? "today" : "future"; }
 const todayLecture = () => S.lectures.find(l => l.date === todayStr());
 const nextLecture = () => {
@@ -85,7 +111,8 @@ const remainingFor = attended => S.lectures.filter(l => lectureState(l) !== "pas
 /* ───────── 상태 ───────── */
 let B, noticeUnsub, noticeEpoch = 0, courseTimer;
 const testLabel = () => B.environment === "staging" ? '<span class="pill p-warn">시험용</span>'
-  : B.environment === "development" ? '<span class="pill p-warn">개발용</span>' : "";
+  : B.environment === "development" ? '<span class="pill p-warn">개발용</span>'
+  : B.environment === "demo" ? '<span class="pill p-warn">시연용 · 가상 자료</span>' : "";
 const S = {
   user: null, profile: null, staff: false, role: "p",
   lectures: scheduledLectures(),
@@ -112,6 +139,13 @@ const TABS = {
   p: [["home", "홈", "home"], ["sched", "일정", "cal"], ["att", "출석", "qr"], ["ai", "도우미", "ai"], ["me", "내 정보", "me"]],
   a: [["dash", "현황", "dash"], ["people", "참가자", "users"], ["scan", "출석", "qr"], ["noti", "공지·문의", "send"], ["deep", "심화", "star"], ["judge", "심사", "award"]]
 };
+// 심사위원은 심사 탭만 (참가자 개인정보 화면 없음)
+const tabList = () => S.role === "a" && !S.staff ? TABS.a.filter(([k]) => k === "judge") : TABS[S.role];
+const isAdmin = () => S.staffRole === "admin";
+// 현장 정원: 현장 참여로 승인된 사람 중 대기자가 아닌 인원
+const onsiteSeated = () => S.users.filter(u => u.mode !== "online" && !u.onsiteWaitlist).length;
+const onsiteWaiting = () => S.users.filter(u => u.mode !== "online" && u.onsiteWaitlist).sort((a, b) => (a.approvedAt || a.createdAt || 0) - (b.approvedAt || b.createdAt || 0));
+const modeLabel = u => u.mode === "online" ? "온라인" : u.onsiteWaitlist ? "현장 대기" : "현장";
 let lastInd = null, pending = false;
 
 function shell() {
@@ -124,7 +158,7 @@ function shell() {
       <button class="bell" id="bellBtn" aria-label="앱 알림함">${ic("home").replace(ICON.home, '<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>')}<i id="bellDot" hidden></i></button>
     </div>
     <div class="seg" id="seg" role="group" aria-label="화면 구분" hidden>
-      <button id="roleP" aria-pressed="true">참가자</button><button id="roleA" aria-pressed="false">운영진</button>
+      <button id="roleP" aria-pressed="true">참가자</button><button id="roleA" aria-pressed="false">${S.staff ? "운영진" : "심사"}</button>
     </div>
   </header>
   <main id="view" tabindex="-1"></main>
@@ -136,6 +170,7 @@ function shell() {
 }
 function setRole(r) {
   if (S.role === r) return;
+  if (r === "p" && !S.staff && !isApprovedProfile(S.profile)) { toast("참가자 화면은 가입 승인 후에 쓸 수 있어요"); return; }
   if (S.role === "a") stopScanner();
   S.role = r; LS.set("role", r);
   startNotices();
@@ -144,14 +179,15 @@ function setRole(r) {
 }
 function render(anim) {
   if (!S.user) return renderAuth();
-  if (!S.staff && !isApprovedProfile(S.profile)) return S.profile ? renderApprovalPending() : renderOnboard();
+  if (!S.console && !isApprovedProfile(S.profile)) return S.profile ? renderApprovalPending() : renderOnboard();
   if (!$("#view")) shell();
-  $("#seg").hidden = !S.staff;
+  $("#seg").hidden = !S.console || (!S.staff && !isApprovedProfile(S.profile));
   const to = $("#topOrg"); if (to) to.textContent = S.profile ? affiliationFull(S.profile) : ORG_ROOT;
   $("#seg").classList.toggle("a", S.role === "a");
   $("#roleP").setAttribute("aria-pressed", S.role === "p");
   $("#roleA").setAttribute("aria-pressed", S.role === "a");
-  const tabs = TABS[S.role], cur = S.tab[S.role];
+  const tabs = tabList(); if (!tabs.some(([k]) => k === S.tab[S.role])) S.tab[S.role] = tabs[0][0];
+  const cur = S.tab[S.role];
   const nav = $("#tabs");
   nav.style.gridTemplateColumns = `repeat(${tabs.length},1fr)`;
   nav.innerHTML = '<span class="ind"></span>' + tabs.map(([k, l, i]) => `<button data-tab="${k}" ${k === cur ? 'aria-current="page"' : ""}>${ic(i)}<span>${l}</span></button>`).join("");
@@ -189,7 +225,7 @@ function refresh() {
 }
 document.addEventListener("focusout", () => setTimeout(() => { if (pending) refresh(); }, 200));
 function go(t) {
-  const tabs = TABS[S.role].map(x => x[0]);
+  const tabs = tabList().map(x => x[0]);
   if (!tabs.includes(t)) return;
   const dir = tabs.indexOf(t) < tabs.indexOf(S.tab[S.role]) ? "back" : "fwd";
   if (S.tab[S.role] === "scan") { if (t === "scan") return; stopScanner(); }
@@ -313,7 +349,8 @@ function renderAuth() {
   <div class="auth">
     <div class="logo"><img class="signature" src="img/puac-signature-ko.jpg" alt="민주평화통일자문회의"><b>${esc(APP.displayName)}</b><span>${esc(APP.cohortName)}</span>${testLabel()}</div>
     <div style="display:flex;justify-content:center;margin:-4px 0 12px">${langChips()}</div>
-    <section class="card">
+    ${B.seeded && !deletionPage ? `<section class="card" id="demoCard"><h2 style="margin:0 0 4px">시연 화면 들어가기</h2><p class="small muted" style="margin:0 0 12px">모든 이름과 기록은 가상 자료이며 이 기기에만 저장돼요. 시연 시각은 2027. 5. 15.(토) 3강 진행 중으로 맞춰져 있어요.</p><div class="form"><button class="btn block" type="button" data-demo="p">참가자로 보기</button><button class="btn block" type="button" data-demo="a">관리자로 보기</button><button class="btn ghost block" type="button" data-demo="j">심사위원으로 보기</button><button class="btn ghost mini" type="button" id="demoReset">시연 자료 처음 상태로</button></div></section>` : ""}
+    <section class="card" ${B.seeded && !deletionPage ? "hidden" : ""}>
       <h2 style="margin:0 0 4px">${deletionPage ? "계정 및 데이터 삭제" : signup ? "회원가입" : "로그인"}</h2>
       <p class="small muted" style="margin:0 0 12px">${deletionPage ? "삭제하려는 계정으로 로그인한 뒤 삭제를 확인해 주세요." : signup ? "이메일과 비밀번호로 계정을 만든 뒤 수강 신청서를 작성해요." : "수강 신청, QR 출석, 수료증을 앱 하나로 관리해요."}</p>
       <form class="form" id="authForm" novalidate>
@@ -329,10 +366,12 @@ function renderAuth() {
         ${signup ? "" : '<button class="btn ghost mini" id="rsBtn">비밀번호 찾기</button>'}
       </div>
     </section>
-    ${B.mode === "demo" ? `<p class="note">${deletionPage ? "서버에 연결할 수 없어요. 연결을 확인한 뒤 페이지를 다시 열어 주세요." : "체험 모드: 이 기기에만 저장돼요. 아무 이메일로나 들어가 볼 수 있어요."}</p>` : ""}
+    ${B.mode === "demo" && !B.seeded ? `<p class="note">${deletionPage ? "서버에 연결할 수 없어요. 연결을 확인한 뒤 페이지를 다시 열어 주세요." : "체험 모드: 이 기기에만 저장돼요. 아무 이메일로나 들어가 볼 수 있어요."}</p>` : ""}
     <p class="note"><button class="btn ghost mini" id="pvBtn"><b>개인정보 처리방침</b></button> <button class="btn ghost mini" id="tmBtn">이용약관</button> <button class="btn ghost mini" id="pmBtn">앱 접근권한</button></p>
   </div>`;
   const err = m => ($("#aErr").textContent = m || "");
+  $$("[data-demo]").forEach(b => (b.onclick = () => B.enterDemo(b.dataset.demo)));
+  const dr = $("#demoReset"); if (dr) dr.onclick = () => { B.resetDemo(); toast("시연 자료를 처음 상태로 되돌렸어요"); };
   if (!deletionPage) $("#swBtn").onclick = () => { S.authMode = signup ? "login" : "signup"; renderAuth(); };
   if (deletionPage && B.mode === 'demo') $("#aBtn").disabled = true;
   $("#pvBtn").onclick = privacySheet; $("#tmBtn").onclick = termsSheet; $("#pmBtn").onclick = permSheet;
@@ -386,12 +425,17 @@ function accountRemovalSheet() {
   };
 }
 
+function approvalStatusHtml(p) {
+  const note = p?.approvalNote ? `<p class="small" data-noi18n>${esc(p.approvalNote)}</p>` : "";
+  if (p?.approvalStatus === "rejected") return `<h2 id="approvalHeading">가입이 반려되었어요</h2><p class="small muted" role="status">운영진이 신청서를 확인한 결과 이번 기수에는 참여가 어려워요. 궁금한 점은 사무처로 문의해 주세요.</p>${note}<p class="small muted">계정을 삭제하면 신청서도 함께 지워져요.</p>`;
+  if (p?.approvalStatus === "hold") return `<h2 id="approvalHeading">가입 확인 중 (보류)</h2><p class="small muted" role="status">운영진이 신청 내용을 확인하고 있어요. 확인이 끝나면 승인 여부가 이 화면에 표시돼요.</p>${note}`;
+  return `<h2 id="approvalHeading">가입 승인 대기</h2><p class="small muted" role="status">신청서를 접수했어요. 운영진이 승인하면 평화학교를 이용할 수 있어요.</p>`;
+}
 function renderApprovalPending() {
   $("#root").innerHTML = `<div class="auth">
     <div class="logo"><img class="signature" src="img/puac-signature-ko.jpg" alt="민주평화통일자문회의"><b>${esc(APP.displayName)}</b>${testLabel()}</div>
     <section class="card" id="approvalPending" aria-labelledby="approvalHeading">
-      <h2 id="approvalHeading">가입 승인 대기</h2>
-      <p class="small muted" role="status">신청서를 접수했어요. 운영진이 승인하면 평화학교를 이용할 수 있어요.</p>
+      ${approvalStatusHtml(S.profile)}
       <p class="small muted" id="approvalError" role="status" hidden></p>
       <button class="btn block" id="refreshApproval" type="button">승인 상태 확인</button>
       <button class="btn ghost block" id="leaveApproval" type="button">다른 계정으로 로그인</button>
@@ -436,7 +480,7 @@ function onboardCard() {
     <label class="f">소속 (학교·직장, 선택)<input id="oOrg" maxlength="40" value="${esc(d.org || "")}" placeholder="예: 부산대학교"></label>
     <div class="f" role="radiogroup" aria-label="참여 방식"><span class="small" style="font-weight:600">참여 방식</span>
       <div class="chips" style="margin-top:6px">${[["onsite", "부산 현장"], ["online", "온라인"]].map(([k, l]) => `<button type="button" class="chip" data-mode="${k}" aria-pressed="${(d.mode || "onsite") === k}">${l}</button>`).join("")}</div></div>
-    <p class="small muted" style="margin:0">${esc(VENUE)} · 두 방식 모두 출석으로 인정돼요.</p>`;
+    <p class="small muted" style="margin:0">${esc(VENUE)} · 두 방식 모두 출석으로 인정돼요.</p>${S.onsiteStats?.full ? `<p class="small" style="margin:6px 0 0"><span class="pill p-warn">현장 정원 마감</span> 현장 ${ONSITE_CAP}명이 모두 찼어요. 현장으로 신청하면 대기자로 접수되고, 자리가 나면 순서대로 안내해 드려요.</p>` : ""}`;
   else body = `
     <h2 style="margin:0 0 4px">3. 동의와 확인</h2><p class="small muted" style="margin:0 0 12px">아래 내용으로 신청해요.</p>
     <dl class="kv"><dt>이름</dt><dd>${esc(d.name)}</dd><dt>출생연도</dt><dd>${esc(d.birthYear)}년</dd><dt>지역</dt><dd>${esc(d.region)}</dd><dt>민주평통</dt><dd>${esc(affiliationLabel(d))}</dd><dt>구분</dt><dd>${esc(d.memberType)}${d.memberType === "자문위원" ? ` ${esc(d.memberTerm || "")} (가입 후 운영진 인증)` : ""}</dd><dt>소속</dt><dd>${esc(d.org || "-")}</dd><dt>참여</dt><dd>${(d.mode || "onsite") === "online" ? "온라인" : "부산 현장"}</dd></dl>
@@ -508,7 +552,7 @@ const orgKey = u => (u.orgRegion && u.orgRegion !== ORG_NONE ? u.orgRegion : ORG
 
 /* ───────── 참가자 화면 ───────── */
 function lectureCard(l, tag) {
-  return `<h2>${esc(l.title)}</h2><p>${fmtDate(l.date)} ${l.start}~${l.end} · ${esc(VENUE)}</p>`;
+  return `<h2>${esc(l.title)}</h2><p>${fmtDate(l.date)} ${l.start}~${l.end}${localTimeNote(l)} · ${esc(VENUE)}</p>`;
 }
 function updateInquiryBadge() {
   const tab = $('[data-tab="ai"]');
@@ -568,7 +612,7 @@ const VIEWS = {
       <div class="list">${S.lectures.map(l => {
         const st = lectureState(l), a = att.includes(l.n);
         const pill = a ? '<span class="pill p-ok">출석</span>' : st === "past" ? '<span class="pill p-bad">결석</span>' : st === "today" ? '<span class="pill p-warn">오늘</span>' : '<span class="pill p-mute">예정</span>';
-        return `<div class="li"><div class="dot ${a ? "done" : st === "today" ? "now" : ""}">${l.n}강</div><div class="body"><div class="k">${esc(l.title)}</div><div class="small muted">${fmtDate(l.date)} ${l.start}~${l.end}${l.tag ? " · " + l.tag : ""}</div></div>${pill}</div>`;
+        return `<div class="li"><div class="dot ${a ? "done" : st === "today" ? "now" : ""}">${l.n}강</div><div class="body"><div class="k">${esc(l.title)}</div><div class="small muted">${fmtDate(l.date)} ${l.start}~${l.end}${localTimeNote(l)}${l.tag ? " · " + l.tag : ""}</div></div>${pill}</div>`;
       }).join("")}</div>
       <p class="small muted" style="margin:10px 0 0">강연 80분과 라운드 테이블 40분으로 짧고 알차게 진행해요. 결석한 강의는 다시보기로 복습할 수 있지만 출석으로 인정되지는 않아요.</p>
     </section>
@@ -646,6 +690,7 @@ const VIEWS = {
     <section class="card">
       <h2>표시 설정</h2>
       <div class="list">
+        ${remindersAvailable() ? `<div class="li"><div class="body"><div class="k small">강의 알림</div><div class="small muted">강의 전날 저녁 7시와 시작 1시간 전에 휴대폰 알림</div></div><label class="toggle" aria-label="강의 알림"><input type="checkbox" id="remT" ${LS.get("remind", false) ? "checked" : ""}><span></span></label></div>` : ""}
         <div class="li"><div class="body"><div class="k small">큰 글씨</div><div class="small muted">글자를 키워 읽기 편하게</div></div><label class="toggle" aria-label="큰 글씨"><input type="checkbox" id="lgT" ${LS.get("large", false) ? "checked" : ""}><span></span></label></div>
         <div class="li"><div class="body"><div class="k small">화면 테마</div></div><div class="chips">${[["system", "자동"], ["light", "밝게"], ["dark", "어둡게"]].map(([k, l]) => `<button class="chip" data-theme-set="${k}" aria-pressed="${LS.get("theme", "system") === k}">${l}</button>`).join("")}</div></div>
         <div class="li"><div class="body"><div class="k small">언어 · Language</div></div>${langChips()}</div>
@@ -704,10 +749,11 @@ const VIEWS = {
     </section>
     <section class="card">
       <div class="row between"><h2 style="margin:0">운영진</h2><span class="small muted">${S.staffList.length}명</span></div>
-      <div class="list small" style="margin-top:8px">${S.staffList.map(s => { const u = S.users.find(x => x.uid === s.id); return `<div class="li"><div class="body"><div class="k">${esc(s.label || (u && u.name) || "운영진")}</div><div class="muted" style="font-size:.72rem;overflow-wrap:anywhere">${esc(s.id)}</div></div>${s.id !== S.user.uid ? `<button class="btn ghost mini" data-unstaff="${esc(s.id)}">해제</button>` : '<span class="pill p-mute">나</span>'}</div>`; }).join("")}</div>
-      <p class="small muted" style="margin:10px 0 0">새 운영진은 그 사람이 앱에 먼저 가입한 뒤, 참가자 탭에서 이름을 눌러 지정해요. 가입서를 안 쓴 사람은 내 정보의 계정 ID로 추가해요.</p>
-      <form class="composer" id="staffForm" style="margin-top:8px"><input id="staffUid" placeholder="계정 ID 붙여넣기" aria-label="운영진 계정 ID"><button class="btn" type="submit">추가</button></form>
-    </section>`;
+      <div class="list small" style="margin-top:8px">${S.staffList.map(s => { const u = S.users.find(x => x.uid === s.id), r = s.role || "admin"; return `<div class="li"><div class="body"><div class="k">${esc(s.label || (u && u.name) || "운영진")} <span class="pill ${r === "admin" ? "p-gold" : r === "judge" ? "p-mute" : "p-ok"}">${STAFF_ROLES[r] || "운영진"}</span></div><div class="muted" style="font-size:.72rem;overflow-wrap:anywhere">${esc(s.id)}</div></div>${s.id === S.user.uid ? '<span class="pill p-mute">나</span>' : isAdmin() ? `<select data-staff-role="${esc(s.id)}" aria-label="역할 바꾸기" style="padding:4px 6px;border-radius:8px;border:1px solid var(--line);background:var(--surface)">${Object.entries(STAFF_ROLES).map(([k, l]) => `<option value="${k}" ${k === r ? "selected" : ""}>${l}</option>`).join("")}</select><button class="btn ghost mini" data-unstaff="${esc(s.id)}">해제</button>` : ""}</div>`; }).join("")}</div>
+      <p class="small muted" style="margin:10px 0 0">관리자: 운영진 지정·해제와 모든 업무 · 운영진: 출석·공지·문의·선발·심사 · 심사위원: 심사 화면만 (참가자 정보 열람 불가)</p>
+      ${isAdmin() ? `<p class="small muted" style="margin:6px 0 0">새 운영진은 그 사람이 앱에 먼저 가입한 뒤, 참가자 탭에서 이름을 눌러 지정해요. 외부 심사위원처럼 가입서를 안 쓴 사람은 계정 ID로 추가해요.</p>
+      <form class="composer" id="staffForm" style="margin-top:8px"><input id="staffUid" placeholder="계정 ID 붙여넣기" aria-label="운영진 계정 ID"><select id="staffRole" aria-label="역할" style="padding:6px 8px;border-radius:10px;border:1px solid var(--line);background:var(--surface)"><option value="judge">심사위원</option><option value="staff">운영진</option><option value="admin">관리자</option></select><button class="btn" type="submit">추가</button></form>` : '<p class="small muted" style="margin:6px 0 0">운영진 지정·해제는 관리자만 할 수 있어요.</p>'}
+    </section>${consoleOutCard()}`;
   },
   people() {
     const approvals = [...S.pendingApprovals].sort((a, b) => a.createdAt - b.createdAt);
@@ -720,8 +766,12 @@ const VIEWS = {
     return `
     <section class="card">
       <div class="row between"><h2 style="margin:0">가입 승인 대기</h2><span class="pill p-warn">${approvals.length}명</span></div>
-      <div class="list">${approvals.length ? approvals.map(u => `<article class="li"><div class="body"><b><span data-noi18n>${esc(u.name)}</span></b><div class="small muted">${esc(u.email)} · ${esc(affiliationLabel(u))}</div><div class="small muted">${fmtTime(u.createdAt)}</div></div><button class="btn mini" type="button" data-approve-profile="${esc(u.uid)}">가입 승인</button></article>`).join("") : '<p class="small muted">확인할 가입 신청이 없어요.</p>'}</div>
+      <p class="small muted" style="margin:6px 0 0">현장 ${onsiteSeated()} / ${ONSITE_CAP}명${onsiteWaiting().length ? ` · 현장 대기 ${onsiteWaiting().length}명` : ""}. 정원이 차면 현장 신청자는 대기자로 승인돼요.</p>
+      ${approvals.length ? `<label class="check" style="margin-top:8px"><input type="checkbox" id="apAll"> 전체 선택</label>` : ""}
+      <div class="list">${approvals.length ? approvals.map(u => `<article class="li"><label class="check" style="margin:0"><input type="checkbox" class="ap-pick" value="${esc(u.uid)}" aria-label="${esc(u.name)} 선택"></label><div class="body"><b><span data-noi18n>${esc(u.name)}</span></b>${u.approvalStatus === "hold" ? ' <span class="pill p-mute">보류</span>' : ""}<div class="small muted">${esc(u.email)} · ${esc(affiliationLabel(u))} · ${u.mode === "online" ? "온라인" : "현장"}</div><div class="small muted">${fmtTime(u.createdAt)}${u.approvalNote ? ` · <span data-noi18n>${esc(u.approvalNote)}</span>` : ""}</div></div><button class="btn mini" type="button" data-approve-profile="${esc(u.uid)}">승인</button></article>`).join("") : '<p class="small muted">확인할 가입 신청이 없어요.</p>'}</div>
+      ${approvals.length ? `<div class="row wrap" style="gap:8px;margin-top:10px"><button class="btn mini" type="button" id="apOk" disabled>선택 승인</button><button class="btn ghost mini" type="button" id="apHold" disabled>선택 보류</button><button class="btn ghost mini" type="button" id="apNo" disabled>선택 반려</button></div>` : ""}
     </section>
+    ${onsiteWaiting().length ? `<section class="card"><div class="row between"><h2 style="margin:0">현장 대기자</h2><span class="pill p-warn">${onsiteWaiting().length}명</span></div><p class="small muted" style="margin:6px 0 0">승인 순서대로 보여요. 현장 자리가 나면 '현장 확정'을 눌러 주세요.</p><div class="list small">${onsiteWaiting().map((u, i) => `<div class="li"><div class="dot">${i + 1}</div><div class="body"><div class="k"><span data-noi18n>${esc(u.name)}</span></div><div class="muted">${esc(u.no)}</div></div><button class="btn mini" type="button" data-seat="${esc(u.uid)}" ${onsiteSeated() >= ONSITE_CAP ? "disabled" : ""}>현장 확정</button><button class="btn ghost mini" type="button" data-to-online="${esc(u.uid)}">온라인 전환</button></div>`).join("")}</div></section>` : ""}
     <section class="card">
       <div class="row between"><h2 style="margin:0">참가자</h2><span class="small muted num">${rows.length} / ${S.users.length}명</span></div>
       <input class="search" id="pq" style="margin-top:10px" placeholder="이름, 수강번호, 소속, 지역 검색" value="${esc(q)}" aria-label="참가자 검색">
@@ -729,7 +779,7 @@ const VIEWS = {
       <div class="chips" style="margin-top:10px">${[["all", "전체"], ["pass", "수료 요건 충족"], ["risk", "수료 위험"], ["lost", "수료 불가"], ["online", "온라인"], ["verify", `자문위원 인증 대기 ${S.users.filter(isPendingMember).length}`]].map(([k, l]) => `<button class="chip" data-pf="${k}" aria-pressed="${f === k}">${l}</button>`).join("")}</div>
     </section>
     <section class="card" style="padding-top:6px">
-      <div class="list" id="pList">${rows.length ? rows.slice(0, 300).map(u => `<button class="li" data-user="${esc(u.uid)}" style="width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0;cursor:pointer"><div class="body"><div class="k"><span data-noi18n>${esc(u.name)}</span> <span class="small muted" style="font-weight:400">${esc(affiliationLabel(u))}${u.org ? " · " + esc(u.org) : ""}</span></div><div class="small muted">${esc(u.no)} · ${esc(memberLabel(u))} · ${u.mode === "online" ? "온라인" : "현장"}${S.staffList.some(s => s.id === u.uid) ? " · 운영진" : ""}</div></div><span class="pill ${u.att.length >= PASS_COUNT ? "p-ok" : u.att.length + u.rem < PASS_COUNT ? "p-bad" : "p-mute"} num">${u.att.length}/${LECTURES.length}</span></button>`).join("") : '<p class="small muted">조건에 맞는 참가자가 없어요.</p>'}</div>
+      <div class="list" id="pList">${rows.length ? rows.slice(0, 300).map(u => `<button class="li" data-user="${esc(u.uid)}" style="width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0;cursor:pointer"><div class="body"><div class="k"><span data-noi18n>${esc(u.name)}</span> <span class="small muted" style="font-weight:400">${esc(affiliationLabel(u))}${u.org ? " · " + esc(u.org) : ""}</span></div><div class="small muted">${esc(u.no)} · ${esc(memberLabel(u))} · ${modeLabel(u)}${S.staffList.some(s => s.id === u.uid) ? " · 운영진" : ""}</div></div><span class="pill ${u.att.length >= PASS_COUNT ? "p-ok" : u.att.length + u.rem < PASS_COUNT ? "p-bad" : "p-mute"} num">${u.att.length}/${LECTURES.length}</span></button>`).join("") : '<p class="small muted">조건에 맞는 참가자가 없어요.</p>'}</div>
     </section>`;
   },
   scan() {
@@ -774,9 +824,10 @@ const VIEWS = {
         <label class="f">제목<input id="nTitle" maxlength="60" required value="${esc(S.notiDraft?.title || "")}"></label>
         <label class="f">내용<textarea id="nBody" rows="4" maxlength="1000" required>${esc(S.notiDraft?.body || "")}</textarea></label>
         <div class="chips">${[["강의 전날 안내", `[내일 ${(nextLecture() || LECTURES[0]).n}강] ${(nextLecture() || LECTURES[0]).title}\n${fmtDate((nextLecture() || LECTURES[0]).date)} ${(nextLecture() || LECTURES[0]).start} 시작 · ${VENUE}\n앱의 QR 수강증을 준비해 주세요.`], ["다시보기 안내", "[다시보기] 지난 강의 영상과 요약 자료가 올라왔어요. 다시보기는 출석으로 인정되지 않으니 남은 강의를 꼭 챙겨 주세요."], ["수료 독려", "[수료 안내] 남은 강의를 모두 들으면 수료할 수 있어요. 현장이 어렵다면 온라인 출석도 인정돼요."]].map(([k, v]) => `<button type="button" class="chip" data-tpl="${esc(v)}">${k}</button>`).join("")}</div>
+        <p class="small" id="nWarn" role="status" hidden></p>
         <button class="btn" type="submit">공지 올리기</button>
       </form>
-      <p class="small muted" style="margin:10px 0 0">공지는 참가자 앱 첫 화면과 공지함에 바로 보여요. 휴대폰 푸시 알림은 2단계에서 붙일 예정이에요.</p>
+      <p class="small muted" style="margin:10px 0 0">공지는 참가자 앱 첫 화면과 공지함에 바로 보여요. 앱을 설치한 참가자는 강의 전날 저녁과 시작 1시간 전에 휴대폰 알림도 받아요(기기 자체 알림).</p>
     </section>
     <section class="card">
       <h2>올린 공지</h2>
@@ -822,7 +873,7 @@ const VIEWS = {
       <div class="row between"><h2 style="margin:0">실시간 순위 · ${J.round}</h2><span class="pill p-ok">자동 집계</span></div>
       <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>순위</th><th>팀</th><th class="r">심사</th><th class="r">평균</th></tr></thead><tbody id="rankBody">${rankRows()}</tbody></table></div>
       <p class="small muted" style="margin:10px 0 0">${J.round === "예선" ? "예선 상위 4팀이 본선에 올라가요." : "본선 결과는 이 표를 발표 화면에 띄우면 돼요."}</p>
-    </section>`;
+    </section>${consoleOutCard()}`;
   }
 };
 
@@ -914,6 +965,11 @@ function editProfileSheet() {
     if (d.memberType !== "자문위원") { d.memberVerified = ""; d.memberTerm = ""; d.memberNo = ""; }
     else if (p.memberType !== "자문위원" || (p.memberTerm || "") !== d.memberTerm || (p.memberNo || "") !== d.memberNo || p.orgCouncil !== d.orgCouncil || p.orgRegion !== d.orgRegion) d.memberVerified = "pending";
     if (d.phone && !/^01[016789]-?\d{3,4}-?\d{4}$/.test(d.phone)) return ($("#eErr").textContent = "휴대폰 번호 형식을 확인해 주세요.");
+    // 정원이 찬 뒤 온라인에서 현장으로 바꾸면 현장 대기자로 접수
+    if (d.mode === "onsite" && p.mode === "online" && S.onsiteStats?.full) {
+      if (!(await confirmSheet("현장 정원이 찼어요", `현장 ${ONSITE_CAP}명이 모두 찼어요. 현장으로 바꾸면 대기자로 접수되고, 자리가 나면 운영진이 안내해 드려요.`, "대기자로 바꾸기"))) return;
+      d.onsiteWaitlist = true;
+    }
     try { await B.updateProfile(d); Object.assign(S.profile, d); closeSheet(); render(); toast("저장했어요"); }
     catch (e2) { $("#eErr").textContent = "저장하지 못했어요. 다시 시도해 주세요."; }
   };
@@ -1023,12 +1079,17 @@ function userSheet(uid) {
   const u = S.users.find(x => x.uid === uid); if (!u) return;
   const att = attOf(uid), isSt = S.staffList.some(s => s.id === uid), d = S.deepApps.find(a => a.uid === uid);
   sheet(`<div class="row between"><h2 style="margin:0;font-size:1.05rem"><span data-noi18n>${esc(u.name)}</span></h2><span class="pill p-gold">${esc(u.no)}</span></div>
-  <dl class="kv" style="margin-top:10px"><dt>이메일</dt><dd>${esc(u.email)}</dd><dt>출생</dt><dd>${esc(u.birthYear)}년</dd><dt>민주평통</dt><dd>${esc(affiliationLabel(u))}</dd><dt>구분</dt><dd>${esc(memberLabel(u))}${u.memberType === "자문위원" && u.memberNo ? ` · 위촉 번호 ${esc(u.memberNo)}` : ""}</dd><dt>지역</dt><dd>${esc(u.region)}</dd><dt>소속</dt><dd>${esc(u.org || "-")}</dd><dt>연락처</dt><dd>${esc(u.phone || "-")}</dd><dt>참여</dt><dd>${u.mode === "online" ? "온라인" : "현장"}</dd><dt>사진 동의</dt><dd>${u.photoConsent ? "동의" : "미동의"}</dd><dt>심화</dt><dd>${d ? DEEP_STATUS[d.status] : "미지원"}</dd></dl>
+  <dl class="kv" style="margin-top:10px"><dt>이메일</dt><dd>${esc(u.email)}</dd><dt>출생</dt><dd>${esc(u.birthYear)}년</dd><dt>민주평통</dt><dd>${esc(affiliationLabel(u))}</dd><dt>구분</dt><dd>${esc(memberLabel(u))}${u.memberType === "자문위원" && u.memberNo ? ` · 위촉 번호 ${esc(u.memberNo)}` : ""}</dd><dt>지역</dt><dd>${esc(u.region)}</dd><dt>소속</dt><dd>${esc(u.org || "-")}</dd><dt>연락처</dt><dd>${esc(u.phone || "-")}</dd><dt>참여</dt><dd>${modeLabel(u)}</dd><dt>사진 동의</dt><dd>${u.photoConsent ? "동의" : "미동의"}</dd><dt>심화</dt><dd>${d ? DEEP_STATUS[d.status] : "미지원"}</dd></dl>
   <h3 style="margin:14px 0 6px;font-size:.9rem">출결 (눌러서 수동 처리)</h3>
   <div class="row" style="gap:6px">${LECTURES.map(l => `<button class="dot ${att.includes(l.n) ? "done" : ""}" style="flex:1;border:0;cursor:pointer" data-man="${l.n}" aria-pressed="${att.includes(l.n)}" aria-label="${l.n}강 ${att.includes(l.n) ? "출석 취소" : "출석 처리"}">${l.n}</button>`).join("")}</div>
   <p class="small muted" style="margin:8px 0 0">휴대폰 분실, 중계 접속 확인 등 예외 상황에만 쓰세요. 처리한 운영진이 함께 기록돼요.</p>
   ${u.memberType === "자문위원" ? `<h3 style="margin:14px 0 6px;font-size:.9rem">자문위원 인증</h3><p class="small muted" style="margin:0 0 8px">${esc(affiliationLabel(u))} ${esc(u.memberTerm || "")} 자문위원 명단과 이름·소속이 맞는지 확인한 뒤 눌러 주세요.</p><div class="row wrap" style="gap:8px">${u.memberVerified === "verified" ? '<button class="btn ghost mini" data-ver="pending">인증 취소</button>' : '<button class="btn mini" data-ver="verified">자문위원 인증</button><button class="btn ghost mini" data-ver="rejected">명단에 없음 (반려)</button>'}</div>` : ""}
-  <div class="row wrap" style="gap:8px;margin-top:12px">${isSt ? "" : '<button class="btn ghost mini" id="mkStaff">운영진으로 지정</button>'}</div>`);
+  ${u.mode !== "online" ? `<div class="row wrap" style="gap:8px;margin-top:12px">${u.onsiteWaitlist ? '<span class="pill p-warn">현장 대기</span>' : ""}<button class="btn ghost mini" id="toOnline">온라인으로 전환</button></div>` : ""}
+  <div class="row wrap" style="gap:8px;margin-top:12px">${isSt || !isAdmin() ? "" : '<button class="btn ghost mini" id="mkStaff">운영진으로 지정</button><button class="btn ghost mini" id="mkJudge">심사위원으로 지정</button>'}</div>`);
+  const tOn = $("#toOnline");
+  tOn && (tOn.onclick = async () => { if (!(await confirmSheet("온라인 참여로 바꿀까요?", `${u.name}님의 참여 방식이 온라인으로 바뀌고 현장 자리가 하나 비어요.`, "바꾸기"))) return; try { await B.setParticipantMode(uid, "online"); toast("온라인 참여로 바꿨어요"); closeSheet(); } catch { toast("처리하지 못했어요"); } });
+  const mj = $("#mkJudge");
+  mj && (mj.onclick = async () => { if (!(await confirmSheet("심사위원으로 지정할까요?", `${u.name}님은 해커톤 심사 화면만 쓸 수 있고, 참가자 개인정보는 볼 수 없어요.`, "지정하기"))) return; try { await B.addStaff(uid, u.name, "judge"); toast("심사위원으로 지정했어요"); } catch (e) { toast("지정하지 못했어요"); } });
   $$("[data-ver]").forEach(b => (b.onclick = async () => {
     const v = b.dataset.ver;
     try { await B.setMemberVerified(uid, v); const t = S.users.find(x => x.uid === uid); if (t) t.memberVerified = v; toast(v === "verified" ? `${u.name}님을 자문위원으로 인증했어요` : v === "rejected" ? "인증을 반려했어요" : "인증을 취소했어요"); closeSheet(); render(); }
@@ -1040,7 +1101,7 @@ function userSheet(uid) {
     catch (e) { toast("처리하지 못했어요"); }
   }));
   const mk = $("#mkStaff");
-  mk && (mk.onclick = async () => { if (!(await confirmSheet("운영진으로 지정할까요?", `${u.name}님이 모든 참가자 정보와 출결을 보고 고칠 수 있게 돼요.`, "지정하기"))) return; try { await B.addStaff(uid, u.name); toast("운영진으로 지정했어요"); } catch (e) { toast("지정하지 못했어요"); } });
+  mk && (mk.onclick = async () => { if (!(await confirmSheet("운영진으로 지정할까요?", `${u.name}님이 모든 참가자 정보와 출결을 보고 고칠 수 있게 돼요.`, "지정하기"))) return; try { await B.addStaff(uid, u.name, "staff"); toast("운영진으로 지정했어요"); } catch (e) { toast("지정하지 못했어요"); } });
 }
 
 /* ───────── QR 스캐너 ───────── */
@@ -1138,7 +1199,7 @@ async function checkIn(uid, method) {
   try {
     const r = await B.recordAttendance(uid, n, method);
     if (current()) {
-      showScanResult(r.duplicate ? `${u.name}님은 ${n}강 출석이 이미 기록되어 있어요.` : `${u.name}님 · ${n}강 출석 완료`, r.duplicate ? "warn" : "ok");
+      showScanResult(r.duplicate ? `${u.name}님은 ${n}강 출석이 이미 기록되어 있어요.` : `${u.name}님 · ${n}강 출석 완료${u.onsiteWaitlist ? " (현장 대기자: 좌석 확인 필요)" : u.mode === "online" ? " (온라인 신청자)" : ""}`, r.duplicate || u.onsiteWaitlist ? "warn" : "ok");
       navigator.vibrate?.(r.duplicate ? [40, 40, 40] : 80);
     }
     return true;
@@ -1269,6 +1330,14 @@ const BIND = {
     $("#editBtn").onclick = editProfileSheet;
     const pb = $("#printBtn"); pb && (pb.onclick = () => printCert(S.profile));
     $("#lgT").onchange = e => { LS.set("large", e.target.checked); applyPrefs(); };
+    const rem = $("#remT");
+    if (rem) rem.onchange = async e => {
+      if (e.target.checked) {
+        const ok = await enableReminders(S.lectures).catch(() => false);
+        LS.set("remind", ok); e.target.checked = ok;
+        toast(ok ? "강의 알림을 켰어요" : "알림 권한이 없어 켜지 못했어요. 휴대폰 설정에서 알림을 허용해 주세요.", 3600);
+      } else { LS.set("remind", false); await disableReminders(S.lectures).catch(() => {}); toast("강의 알림을 껐어요"); }
+    };
     $$("[data-theme-set]").forEach(b => (b.onclick = () => { LS.set("theme", b.dataset.themeSet); applyPrefs(); render(); }));
     $("#cpUid").onclick = () => copyText(S.user.uid, "계정 ID를 복사했어요");
     $("#pvBtn2").onclick = privacySheet; $("#tmBtn2").onclick = termsSheet; $("#pmBtn2").onclick = permSheet; $("#dlBtn").onclick = myDataExport;
@@ -1282,10 +1351,16 @@ const BIND = {
     $("#csvBtn").onclick = csvExport;
     $("#reportBtn").onclick = reportDraft;
     $$("[data-unstaff]").forEach(b => (b.onclick = async () => { if (!(await confirmSheet("운영진에서 해제할까요?", "이 계정은 더 이상 운영진 화면을 쓸 수 없어요.", "해제", true))) return; try { await B.removeStaff(b.dataset.unstaff); toast("해제했어요"); } catch (e) { toast("해제하지 못했어요"); } }));
-    $("#staffForm").onsubmit = async e => {
-      e.preventDefault(); const id = $("#staffUid").value.trim();
+    $$("[data-staff-role]").forEach(sel => (sel.onchange = async () => {
+      const id = sel.dataset.staffRole, role = sel.value;
+      if (role === "admin" && !(await confirmSheet("관리자로 바꿀까요?", "관리자는 다른 운영진을 지정하고 해제할 수 있어요.", "바꾸기"))) { render(); return; }
+      try { await B.setStaffRole(id, role); toast(`${STAFF_ROLES[role]}(으)로 바꿨어요`); } catch { toast("바꾸지 못했어요"); render(); }
+    }));
+    const sf = $("#staffForm");
+    if (sf) sf.onsubmit = async e => {
+      e.preventDefault(); const id = $("#staffUid").value.trim(), role = $("#staffRole").value;
       if (!/^[A-Za-z0-9_-]{6,128}$/.test(id)) return toast("계정 ID 형식이 아니에요");
-      try { await B.addStaff(id, "운영진"); $("#staffUid").value = ""; toast("운영진으로 추가했어요"); } catch (e2) { toast("추가하지 못했어요"); }
+      try { await B.addStaff(id, STAFF_ROLES[role], role); $("#staffUid").value = ""; toast(`${STAFF_ROLES[role]}(으)로 추가했어요`); } catch (e2) { toast("추가하지 못했어요"); }
     };
   },
   people() {
@@ -1296,16 +1371,50 @@ const BIND = {
     $$("[data-user]").forEach(b => (b.onclick = () => userSheet(b.dataset.user)));
     $$("[data-approve-profile]").forEach(button => button.onclick = async () => {
       const applicant = S.pendingApprovals.find(profile => profile.uid === button.dataset.approveProfile);
-      if (!applicant || !(await confirmSheet("가입을 승인할까요?", `${applicant.name}님이 평화학교를 이용할 수 있게 돼요.`, "승인하기"))) return;
+      if (!applicant) return;
+      const wait = applicant.mode !== "online" && onsiteSeated() >= ONSITE_CAP;
+      if (!(await confirmSheet("가입을 승인할까요?", wait ? `현장 정원 ${ONSITE_CAP}명이 찼어요. ${applicant.name}님은 현장 대기자로 승인돼요.` : `${applicant.name}님이 평화학교를 이용할 수 있게 돼요.`, "승인하기"))) return;
       button.disabled = true;
       try {
-        const changed = await B.approveProfile(applicant.uid);
-        toast(changed ? "가입을 승인했어요" : "이미 처리된 신청이에요");
+        const changed = await B.decideProfile(applicant.uid, "approved", { waitlist: wait });
+        toast(changed ? (wait ? "현장 대기자로 승인했어요" : "가입을 승인했어요") : "이미 처리된 신청이에요");
       } catch {
         button.disabled = false;
         toast("가입을 승인하지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.");
       }
     });
+    const picks = () => $$(".ap-pick").filter(box => box.checked).map(box => box.value);
+    const syncPicks = () => { const n = picks().length; ["#apOk", "#apHold", "#apNo"].forEach(id => { const b = $(id); if (b) b.disabled = !n; }); };
+    $$(".ap-pick").forEach(box => (box.onchange = syncPicks));
+    const all = $("#apAll"); if (all) all.onchange = () => { $$(".ap-pick").forEach(box => (box.checked = all.checked)); syncPicks(); };
+    const decideMany = async (status, label) => {
+      const uids = picks(); if (!uids.length) return;
+      let note = "";
+      if (status !== "approved") {
+        const reasons = status === "rejected" ? ["참가 대상 연령이 아님", "신청 정보가 사실과 다름", "중복 신청", "기타 (사무처 문의)"] : ["소속 확인 필요", "연락처 확인 필요", "기타 확인 필요"];
+        note = await pickReason(`${uids.length}명 ${label}`, reasons);
+        if (note == null) return;
+      } else if (!(await confirmSheet(`${uids.length}명을 승인할까요?`, `현장 정원 ${ONSITE_CAP}명을 넘는 현장 신청자는 신청 순서대로 대기자로 승인돼요.`, "승인하기"))) return;
+      let seated = onsiteSeated(), done = 0, waited = 0, failed = 0;
+      const ordered = uids.map(uid => S.pendingApprovals.find(u => u.uid === uid)).filter(Boolean).sort((a, b) => a.createdAt - b.createdAt);
+      for (const u of ordered) {
+        const wait = status === "approved" && u.mode !== "online" && seated >= ONSITE_CAP;
+        try {
+          if (await B.decideProfile(u.uid, status, { note, waitlist: wait })) { done++; if (wait) waited++; else if (status === "approved" && u.mode !== "online") seated++; }
+        } catch { failed++; }
+      }
+      toast(`${done}명 ${label}${waited ? ` (현장 대기 ${waited}명)` : ""}${failed ? ` · ${failed}명 실패` : ""}`, 3600);
+    };
+    const ok = $("#apOk"); if (ok) ok.onclick = () => decideMany("approved", "승인");
+    const hold = $("#apHold"); if (hold) hold.onclick = () => decideMany("hold", "보류");
+    const no = $("#apNo"); if (no) no.onclick = () => decideMany("rejected", "반려");
+    $$("[data-seat]").forEach(b => (b.onclick = async () => {
+      if (onsiteSeated() >= ONSITE_CAP) return toast("현장 정원이 아직 차 있어요");
+      try { await B.setOnsiteWaitlist(b.dataset.seat, false); toast("현장 참여로 확정했어요. 공지나 문의 답변으로 알려 주세요.", 3600); } catch { toast("처리하지 못했어요"); }
+    }));
+    $$("[data-to-online]").forEach(b => (b.onclick = async () => {
+      try { await B.setParticipantMode(b.dataset.toOnline, "online"); toast("온라인 참여로 바꿨어요"); } catch { toast("처리하지 못했어요"); }
+    }));
   },
   scan() {
     $("#scanL").onchange = e => {
@@ -1338,7 +1447,9 @@ const BIND = {
     PARTIAL.scan();
   },
   noti() {
-    $$("[data-tpl]").forEach(b => (b.onclick = () => { const v = b.dataset.tpl; $("#nTitle").value = v.split("\n")[0].slice(0, 60); $("#nBody").value = v; }));
+    const warnDraft = () => { const w = $("#nWarn"); if (!w) return; const tentative = /\(안\)|미정|확인 필요/.test($("#nBody").value + $("#nTitle").value); w.hidden = !tentative; w.innerHTML = tentative ? '<span class="pill p-warn">확인 필요</span> 장소·일정에 "(안)"이나 미정 표시가 있어요. 확정된 내용인지 확인한 뒤 올려 주세요.' : ""; };
+    $$("[data-tpl]").forEach(b => (b.onclick = () => { const v = b.dataset.tpl; $("#nTitle").value = v.split("\n")[0].slice(0, 60); $("#nBody").value = v; warnDraft(); }));
+    $("#nBody").addEventListener("input", warnDraft);
     $("#notiForm").onsubmit = async e => {
       e.preventDefault();
       const title = $("#nTitle").value.trim(), body = $("#nBody").value.trim();
@@ -1429,8 +1540,17 @@ function stopAll() {
   unsubs = [];
   staffUnsubs = [];
 }
+let reminderKey = "";
+function refreshReminders() {
+  if (!remindersAvailable() || !LS.get("remind", false) || !isApprovedProfile(S.profile)) return;
+  const key = JSON.stringify(S.lectures.map(l => [l.n, l.date, l.start, l.schedule ? l.schedule.start : 0]));
+  if (key === reminderKey) return;
+  reminderKey = key;
+  syncReminders(S.lectures).catch(() => { reminderKey = ""; });
+}
 function refreshCourse() {
   clearTimeout(courseTimer);
+  refreshReminders();
   if (!S.user || document.hidden) return;
   if ((S.profile && S.role === "p" && ["home", "sched", "att", "me"].includes(S.tab.p))
       || (S.role === "a" && ["dash", "scan"].includes(S.tab.a))) refresh();
@@ -1466,10 +1586,12 @@ function restartScores() {
   staffUnsubs.push(() => S._scoreUnsub && S._scoreUnsub());
 }
 function startStaffData() {
-  if (staffUnsubs.length || !S.staff) return;
+  if (staffUnsubs.length || !S.console) return;
+  if (!S.staff) { restartScores(); return; } // 심사위원: 점수만
   staffUnsubs.push(B.watchUsers(r => {
     S.users = r.filter(isApprovedProfile);
-    S.pendingApprovals = r.filter(profile => profile.approvalStatus === "pending");
+    S.pendingApprovals = r.filter(profile => ["pending", "hold"].includes(profile.approvalStatus));
+    publishOnsite();
     refresh();
   }));
   staffUnsubs.push(B.watchAllAttendance(r => { S.allAtt = r; refresh(); }));
@@ -1480,6 +1602,13 @@ function startStaffData() {
   ));
   staffUnsubs.push(B.watchStaff(r => { S.staffList = r; refresh(); }));
   restartScores();
+}
+// 가입 화면의 "현장 정원 마감" 안내용 현황을 운영진 앱이 갱신 (바뀔 때만 씀)
+function publishOnsite() {
+  if (!S.staff || !S.onsiteStatsLoaded) return;
+  const count = onsiteSeated(), full = count >= ONSITE_CAP, cur = S.onsiteStats;
+  if (cur && cur.count === count && cur.full === full && cur.cap === ONSITE_CAP) return;
+  B.publishOnsiteStats({ count, cap: ONSITE_CAP, full }).catch(() => {});
 }
 let prevAttCount = null;
 async function onSignedIn(u) {
@@ -1495,21 +1624,30 @@ async function onSignedIn(u) {
   if (deletionPage) return renderAuth();
   $("#root").innerHTML = '<div class="auth"><p class="note" style="text-align:center">불러오는 중…</p></div>';
   try {
-    const [profile, staff] = await Promise.all([B.getProfile(), B.isStaff()]);
+    const [profile, staffRole] = await Promise.all([B.getProfile(), B.staffRole()]);
     if (S.user?.uid !== u.uid) return;
-    const deepApp = isApprovedProfile(profile) || (staff && profile) ? await B.getDeepApp() : null;
+    const staff = staffRole === "admin" || staffRole === "staff";
+    const deepApp = isApprovedProfile(profile) ? await B.getDeepApp() : null;
     if (S.user?.uid !== u.uid) return;
-    Object.assign(S, { profile, staff, deepApp });
+    Object.assign(S, { profile, staff, staffRole, console: !!staffRole, deepApp });
     // 통신이 약한 현장에서도 QR 수강증을 띄울 수 있도록 이름과 수강번호만 기기에 남긴다
     try { if (isApprovedProfile(profile)) localStorage.setItem("psb_pass", JSON.stringify({ uid: u.uid, name: profile.name, no: profile.no })); } catch (e) {}
   } catch {
     if (S.user?.uid === u.uid) connectionError(() => onSignedIn(u));
     return;
   }
-  if (!S.staff && !isApprovedProfile(S.profile)) {
+  unsubs.push(B.watchOnsiteStats(stat => {
+    if (S.user?.uid !== u.uid) return;
+    S.onsiteStats = stat; S.onsiteStatsLoaded = true;
+    publishOnsite();
+    if (!S.profile && $("#obForm")) { const v = $("#view"); if (v && S.onboardStep === 1) { v.innerHTML = onboardCard(); bindOnboard(); } }
+  }));
+  if (!S.console && !isApprovedProfile(S.profile)) {
     render();
     if (S.profile) unsubs.push(B.watchOwnProfile(profile => {
-      if (S.user?.uid === u.uid && isApprovedProfile(profile)) void onSignedIn(u);
+      if (S.user?.uid !== u.uid) return;
+      if (isApprovedProfile(profile)) { void onSignedIn(u); return; }
+      if (profile && profile.approvalStatus !== S.profile?.approvalStatus) { S.profile = { ...S.profile, ...profile }; render(); }
     }, () => {
       const error = $("#approvalError");
       if (error) { error.hidden = false; error.textContent = "연결을 확인한 뒤 승인 상태를 다시 확인해 주세요."; }
@@ -1517,8 +1655,9 @@ async function onSignedIn(u) {
     return;
   }
   if (S.profile && S.profile.largeText != null && LS.get("large", null) == null) { LS.set("large", !!S.profile.largeText); applyPrefs(); }
-  S.role = S.staff ? LS.get("role", S.profile ? "p" : "a") : "p";
-  if (!S.profile && S.staff) S.role = "a";
+  S.role = S.console ? LS.get("role", S.profile ? "p" : "a") : "p";
+  if (!S.profile && S.console) S.role = "a";
+  if (S.role === "p" && !S.staff && !isApprovedProfile(S.profile)) S.role = "a";
   const updateCourse = ({ lectures, deepDeadline }) => {
     if (S.user?.uid !== u.uid) return;
     S.lectures = scheduledLectures(lectures);
@@ -1528,9 +1667,9 @@ async function onSignedIn(u) {
   unsubs.push(B.watchCourseSchedule(updateCourse, () => updateCourse({ lectures: {}, deepDeadline: null })));
   startNotices();
   unsubs.push(B.watchInboxReads(keys => { S.reads = new Set(keys); S.inboxError = false; refresh(); }, () => { S.inboxError = true; refresh(); }));
-  if (S.profile) startProfileData();
+  if (S.profile && (S.staff || isApprovedProfile(S.profile))) startProfileData();
   if (S.role === "a") startStaffData();
-  if (S.profile || S.staff) { shell(); render("fwd"); } else render();
+  if (S.profile || S.console) { shell(); render("fwd"); } else render();
 }
 function startProfileData() {
   if (S._profSubs) return; S._profSubs = true;

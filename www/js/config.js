@@ -7,7 +7,7 @@ export const APP = {
   name: "한반도 평화학교",
   cohortName: "부산 청년 과정",
   org: "민주평화통일자문회의 부산지역회의",
-  version: "1.4.0",
+  version: "1.5.0",
   year: 2027,
   privacyVersion: "2027-01",          // 개인정보 처리방침 버전 (바꾸면 재동의 안내)
   termsVersion: "2027-01",            // 이용약관 버전

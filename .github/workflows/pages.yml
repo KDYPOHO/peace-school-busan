@@ -22,11 +22,16 @@ jobs:
       - run: npm run build:web
         env:
           PSB_BUILD_MODE: production
+      - run: mkdir -p _site && cp -R www/. _site/
       - name: 소개 누리집(site/)을 /home/ 경로에 함께 배포
-        run: python3 site/build.py && mkdir -p www/home && cp -R site/*.html site/css site/js site/img www/home/
+        run: python3 site/build.py && mkdir -p _site/home && cp -R site/*.html site/css site/js site/img _site/home/
+      # 간담회 시연용: 서버 연결 없이 가상 자료로만 동작하는 사본 (/demo/)
+      - run: npm run build:web && mkdir -p _site/demo && cp -R www/. _site/demo/
+        env:
+          PSB_BUILD_MODE: demo
       - uses: actions/configure-pages@v5
         with: { enablement: true }
       - uses: actions/upload-pages-artifact@v3
-        with: { path: www }
+        with: { path: _site }
       - id: d
         uses: actions/deploy-pages@v4

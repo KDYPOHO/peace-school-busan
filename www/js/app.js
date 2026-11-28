@@ -11,6 +11,7 @@ const TERMS = ["제22기", "제21기"];
 const memberLabel = u => !u || !u.memberType ? "-" : u.memberType !== "자문위원" ? u.memberType : u.memberVerified === "verified" ? ("자문위원 " + (u.memberTerm || "") + " · 인증됨").replace("  ", " ") : u.memberVerified === "rejected" ? "자문위원 · 인증 반려" : "자문위원 · 인증 대기";
 const isPendingMember = u => u.memberType === "자문위원" && u.memberVerified !== "verified" && u.memberVerified !== "rejected";
 const memberFields = (d, px) => d.memberType !== "자문위원" ? "" : `<div class="row" style="gap:8px"><label class="f" style="flex:1">자문위원 기수<select id="${px}Term">${TERMS.map(t => `<option ${d.memberTerm === t ? "selected" : ""}>${t}</option>`).join("")}</select></label><label class="f" style="flex:1.4">위촉 번호 (선택)<input id="${px}MemNo" maxlength="20" value="${esc(d.memberNo || "")}" placeholder="위촉장 번호"></label></div><p class="small muted" style="margin:-4px 0 4px">자문위원은 운영진이 명단과 대조해 인증한 뒤 '인증됨'으로 표시돼요. 그전까지는 '인증 대기'예요.</p>`;
+import { initI18n, langChips, toHelperQuery, currentLang } from "./i18n.js";
 import { privacyHtml, termsHtml, permissionsHtml, consentTable, CONSENT_REQUIRED, CONSENT_OPTIONAL, CONSENT_PHOTO } from "./legal.js";
 
 /* ───────── 공통 도구 ───────── */
@@ -310,6 +311,7 @@ function renderAuth() {
   $("#root").innerHTML = `
   <div class="auth">
     <div class="logo"><img class="signature" src="img/puac-signature-ko.jpg" alt="민주평화통일자문회의"><b>${esc(APP.displayName)}</b><span>${esc(APP.cohortName)}</span>${testLabel()}</div>
+    <div style="display:flex;justify-content:center;margin:-4px 0 12px">${langChips()}</div>
     <section class="card">
       <h2 style="margin:0 0 4px">${deletionPage ? "계정 및 데이터 삭제" : signup ? "회원가입" : "로그인"}</h2>
       <p class="small muted" style="margin:0 0 12px">${deletionPage ? "삭제하려는 계정으로 로그인한 뒤 삭제를 확인해 주세요." : signup ? "이메일과 비밀번호로 계정을 만든 뒤 수강 신청서를 작성해요." : "수강 신청, QR 출석, 수료증을 앱 하나로 관리해요."}</p>
@@ -354,7 +356,7 @@ function renderAuth() {
   };
 }
 
-function legalSheet(html) { sheet(`<div class="legal">${html}</div>`); }
+function legalSheet(html) { sheet(`${currentLang() === "en" ? `<p class="small muted" style="margin:0 0 12px">This document is provided in Korean, which is the official version. If anything is unclear, ask staff from the Attendance tab.</p>` : ""}<div class="legal" data-noi18n>${html}</div>`); }
 function privacySheet() { legalSheet(privacyHtml()); }
 function termsSheet() { legalSheet(termsHtml()); }
 function permSheet() { legalSheet(`<h1>앱 접근권한 안내</h1>${permissionsHtml()}`); }
@@ -645,6 +647,7 @@ const VIEWS = {
       <div class="list">
         <div class="li"><div class="body"><div class="k small">큰 글씨</div><div class="small muted">글자를 키워 읽기 편하게</div></div><label class="toggle" aria-label="큰 글씨"><input type="checkbox" id="lgT" ${LS.get("large", false) ? "checked" : ""}><span></span></label></div>
         <div class="li"><div class="body"><div class="k small">화면 테마</div></div><div class="chips">${[["system", "자동"], ["light", "밝게"], ["dark", "어둡게"]].map(([k, l]) => `<button class="chip" data-theme-set="${k}" aria-pressed="${LS.get("theme", "system") === k}">${l}</button>`).join("")}</div></div>
+        <div class="li"><div class="body"><div class="k small">언어 · Language</div></div>${langChips()}</div>
       </div>
     </section>
     ${archiveCard()}
@@ -868,7 +871,7 @@ function deepForm() {
 }
 function certHtml(p, locked) {
   const end = lastCourseLecture().date.split("-").map(Number);
-  return `<div class="cert ${locked ? "locked" : ""}">
+  return `<div class="cert ${locked ? "locked" : ""}" data-noi18n>
     <div class="watermark"><img src="img/symbol.png" alt=""></div>
     <div class="no">제 ${APP.year}-부산청년-${esc(String(p.no).replace(/^BS\d+-/, ""))} 호</div>
     <h4>수료증</h4>
@@ -925,7 +928,7 @@ function ask(q) {
   setTimeout(() => {
     busy = false;
     if (S.user !== viewer) return;
-    const r = faqAnswer(q, { att: myAttended(), profile: S.profile, deepApp: S.deepApp, deepDeadline: S.deepDeadline, next: nextLecture(), fmtDate });
+    const r = faqAnswer(toHelperQuery(q), { att: myAttended(), profile: S.profile, deepApp: S.deepApp, deepDeadline: S.deepDeadline, next: nextLecture(), fmtDate });
     S.chat.push({ who: "ai", text: r.a, src: r.src, ask: r.unknown ? q : null }); render();
     const c2 = $("#chat"); c2 && c2.lastElementChild.scrollIntoView({ block: "nearest", behavior: RM ? "auto" : "smooth" });
   }, RM ? 0 : 650);
@@ -1570,6 +1573,7 @@ function connectionError(retry) {
 }
 
 async function boot() {
+  initI18n();
   $("#root").innerHTML = '<div class="auth"><p class="note" role="status">서버 연결 중…</p></div>';
   try {
     B = await createBackend();

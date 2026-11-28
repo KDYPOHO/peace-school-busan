@@ -1,4 +1,4 @@
-name: 7개 부서 자동 점검
+name: 7개 팀 자동 점검
 on:
   pull_request:
   push:
@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - name: 부서 점검 (오류가 있으면 실패)
+      - name: 자동 점검 (오류가 있으면 실패)
         run: |
           python3 scripts/dept_check.py --format md | tee dept-report.md
           cat dept-report.md >> "$GITHUB_STEP_SUMMARY"

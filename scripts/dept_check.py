@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""평화학교 7개 부서 자동 점검 (무료, 파이썬 표준 라이브러리만 사용).
+"""평화학교 7개 팀 자동 점검 (무료, 파이썬 표준 라이브러리만 사용).
 
 사용법:
   python3 scripts/dept_check.py                 # 저장소 전체 (www, docs, home, README 등)
@@ -26,12 +26,13 @@ RULES_PATH = Path(__file__).resolve().parent / "dept_rules.json"
 IGNORE_MARK = "dept-check: ignore"
 
 DEPT = {
-    "dev": "개발팀",
-    "design": "디자인팀",
+    "quality": "기획·품질팀",
+    "operations": "교육운영팀",
     "marketing": "홍보팀",
-    "social": "소셜·기록팀",
-    "finance": "재무팀",
-    "operations": "대외협력·운영팀",
+    "design": "홍보팀",
+    "dev": "정보화팀",
+    "cooperation": "대외협력팀",
+    "finance": "재무·회계팀",
     "legal": "법무·감사팀",
 }
 LEVEL_ORDER = {"오류": 0, "경고": 1, "참고": 2}
@@ -166,7 +167,7 @@ def check_text(path: Path, lines: list[str], rules: dict, kind: str, out: list[F
         # 공식 명칭 (홍보팀)
         for w in on["wrong"]:
             if w in line:
-                out.append(Finding("오류", "marketing", rp, no, "공식 명칭", f"잘못된 기관명 '{w}' → '{on['full']}'"))
+                out.append(Finding("오류", "quality", rp, no, "공식 명칭", f"잘못된 기관명 '{w}' → '{on['full']}'"))
         if first_full is None and on["full"] in line:
             first_full = no
         if first_short is None and on["short"] in line and on["full"] not in line:
@@ -188,12 +189,12 @@ def check_text(path: Path, lines: list[str], rules: dict, kind: str, out: list[F
         # 날짜 표기 (대외협력·운영팀)
         for m in LOOSE_DATE_RE.finditer(line):
             y, mo, d = m.groups()
-            out.append(Finding("참고", "operations", rp, no, "날짜 표기",
+            out.append(Finding("참고", "quality", rp, no, "날짜 표기",
                                f"'{m.group(0)}' → 공문서 표기 '{y}. {int(mo)}. {int(d)}.'"))
         money_count += len(MONEY_RE.findall(line))
 
     if first_short is not None and (first_full is None or first_short < first_full) and is_doc:
-        out.append(Finding("경고", "marketing", rp, first_short, "공식 명칭",
+        out.append(Finding("경고", "quality", rp, first_short, "공식 명칭",
                            f"'{on['short']}'이 '{on['full']}'보다 먼저 나옴 — 첫 표기는 정식 명칭"))
     if is_doc and money_count >= rules.get("budget_money_threshold", 5):
         body = "\n".join(lines)
@@ -207,7 +208,7 @@ def check_official_style(path: Path, lines: list[str], out: list[Finding]) -> No
     rp = rel(path)
     hits = [no for no, l in enumerate(lines, 1) if POLITE_RE.search(l.strip()) and IGNORE_MARK not in l]
     if hits:
-        out.append(Finding("참고", "operations", rp, hits[0], "공문서체",
+        out.append(Finding("참고", "quality", rp, hits[0], "공문서체",
                            f"서술체 종결(~합니다) {len(hits)}줄 — 보고서는 개조식(~함·~임) 권장"))
 
 
@@ -430,10 +431,10 @@ def check_facts(path: Path, lines: list[str], facts: dict, out: list[Finding]) -
             window = line[max(0, m.start() - 25):m.start()]
             deep_ctx = "심화" in window or ("심화" in prev and "기본" not in window)
             if deep_ctx and facts.get("deep_cap") and n != facts["deep_cap"]:
-                out.append(Finding("경고", "marketing", rp, no, "사실 일치",
+                out.append(Finding("경고", "quality", rp, no, "사실 일치",
                                    f"심화과정 정원 {n}명 ≠ 앱 설정 {facts['deep_cap']}명"))
             elif not deep_ctx and ("기본" in window or "현장" in window) and facts.get("onsite_cap") and n != facts["onsite_cap"]:
-                out.append(Finding("경고", "marketing", rp, no, "사실 일치",
+                out.append(Finding("경고", "quality", rp, no, "사실 일치",
                                    f"기본과정 현장 정원 {n}명 ≠ 앱 설정 {facts['onsite_cap']}명"))
         lm = LECT_RE.findall(line)
         if len(set(lm)) == 1 and "심화" not in line:
@@ -444,7 +445,7 @@ def check_facts(path: Path, lines: list[str], facts: dict, out: list[Finding]) -
                 d = dm[0]
                 got = (int(d.group(2)), int(d.group(3)))
                 if got != (want[1], want[2]):
-                    out.append(Finding("경고", "marketing", rp, no, "사실 일치",
+                    out.append(Finding("경고", "quality", rp, no, "사실 일치",
                                        f"{n}강 날짜 {got[0]}. {got[1]}. ≠ 앱 설정 {want[1]}. {want[2]}."))
 
 
@@ -452,16 +453,16 @@ def check_html_a11y(path: Path, raw: str, out: list[Finding]) -> None:
     """누리집·앱 HTML 접근성 기본 (디자인팀)."""
     rp = rel(path)
     if re.search(r"(?i)<html\b", raw) and not re.search(r'(?i)<html\b[^>]*\blang=', raw):
-        out.append(Finding("경고", "design", rp, 1, "접근성", "<html>에 lang 속성 없음 (lang=\"ko\")"))
+        out.append(Finding("경고", "dev", rp, 1, "접근성", "<html>에 lang 속성 없음 (lang=\"ko\")"))
     if re.search(r"(?i)<html\b", raw) and not re.search(r"(?is)<title>\s*\S", raw):
-        out.append(Finding("경고", "design", rp, 1, "접근성", "<title> 없음"))
+        out.append(Finding("경고", "dev", rp, 1, "접근성", "<title> 없음"))
     for m in re.finditer(r"(?is)<img\b[^>]*>", raw):
         tag = m.group(0)
         if IGNORE_MARK in tag:
             continue
         if not re.search(r"\balt\s*=", tag):
             no = raw[: m.start()].count("\n") + 1
-            out.append(Finding("경고", "design", rp, no, "접근성", "이미지 대체 텍스트(alt) 없음"))
+            out.append(Finding("경고", "dev", rp, no, "접근성", "이미지 대체 텍스트(alt) 없음"))
     for m in re.finditer(r"(?is)<a\b[^>]*target\s*=\s*[\"']_blank[\"'][^>]*>", raw):
         if not re.search(r"noopener|noreferrer", m.group(0)):
             no = raw[: m.start()].count("\n") + 1
@@ -480,7 +481,7 @@ def check_doc_extras(path: Path, lines: list[str], out: list[Finding]) -> None:
             out.append(Finding("참고", "finance", rp, no, "금액 표기", f"'{m.group(0)}' → 세 자리마다 쉼표 ('{int(m.group(1)):,}원')"))
     head = next((l for l in lines if l.strip()), "")
     if "계획" in head and "(안)" not in head and IGNORE_MARK not in head:
-        out.append(Finding("경고", "marketing", rp, 1, "추정 표시", "계획 문서 제목에 '(안)' 표시 없음"))
+        out.append(Finding("경고", "quality", rp, 1, "추정 표시", "계획 문서 제목에 '(안)' 표시 없음"))
 
 
 def run(targets: list[str], rules: dict, style_official: bool = False) -> list[Finding]:
@@ -548,7 +549,7 @@ def print_report(findings: list[Finding], fmt: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="평화학교 7개 부서 자동 점검")
+    ap = argparse.ArgumentParser(description="평화학교 7개 팀 자동 점검")
     ap.add_argument("targets", nargs="*", help="점검할 파일·폴더 (기본: 저장소 전체)")
     ap.add_argument("--format", choices=["text", "md", "json"], default="text")
     ap.add_argument("--style", choices=["official"], help="official: 보고서 개조식 문체도 점검")

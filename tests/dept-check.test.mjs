@@ -90,3 +90,21 @@ test("HTML 접근성: lang·title·alt 누락, 새 창 링크 noopener", () => {
   assert.match(msgs, /noopener/);
 });
 
+
+test("7개 팀 서브에이전트와 42개 업무 스킬이 모두 있음", async () => {
+  const fs = await import("node:fs");
+  const depts = JSON.parse(fs.readFileSync(path.join(root, "docs/departments/departments.json"), "utf8"));
+  assert.equal(depts.length, 7);
+  let n = 0;
+  for (const d of depts) {
+    assert.ok(fs.existsSync(path.join(root, ".claude/agents", `${d.agent}.md`)), d.agent);
+    assert.equal(d.skills.length, 6, d.name);
+    for (const [key] of d.skills) {
+      const f = path.join(root, ".claude/skills", key, "SKILL.md");
+      assert.ok(fs.existsSync(f), key);
+      assert.match(fs.readFileSync(f, "utf8"), new RegExp(`^---\\nname: ${key}\\n`));
+      n++;
+    }
+  }
+  assert.equal(n, 42);
+});

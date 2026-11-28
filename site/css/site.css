@@ -1,4 +1,5 @@
 /* 한반도 평화학교 부산 청년 과정 — 소개 누리집 (GUIDE.md 기준) */
+@font-face{font-family:"Pretendard Variable";font-weight:45 920;font-style:normal;font-display:swap;src:url(fonts/PretendardVariable.woff2) format("woff2-variations"),url(fonts/PretendardVariable.woff2) format("woff2")} /* Pretendard, SIL OFL 1.1 */
 :root{
   --navy:#0F1D4A; --navy-2:#182A63; --deep:#0A1436;
   --gold:#C5A366; --gold-2:#D9BD86; --gold-ink:#8A6A2E;

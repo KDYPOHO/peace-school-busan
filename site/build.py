@@ -61,7 +61,7 @@ def head(page, meta):
 <meta property="og:url" content="{SITE}{'' if page == 'index.html' else page}">
 <meta property="og:image" content="{SITE}img/photo-sea.jpg">
 <link rel="icon" href="img/symbol.png">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="preload" href="css/fonts/PretendardVariable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/site.css">
 <script type="application/ld+json">{json.dumps(ld, ensure_ascii=False)}</script>
 </head>

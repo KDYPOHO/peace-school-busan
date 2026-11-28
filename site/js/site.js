@@ -6,15 +6,46 @@
   var head = document.querySelector('.head');
   var toggle = document.querySelector('.menu-toggle');
   if (head && toggle) {
+    var setOpen = function (open) {
+      if (head.classList.contains('open') === open) return;
+      toggle.click();
+    };
+    // 메뉴 안 링크를 누르면 닫기 (같은 페이지 구획 이동 포함)
+    head.querySelectorAll('.gnb a').forEach(function (a) { a.addEventListener('click', function () { setOpen(false); }); });
+    // 넓은 화면으로 바뀌면 닫기 (스크롤 잠금 해제)
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(min-width: 1021px)');
+      var onMq = function () { if (mq.matches) setOpen(false); };
+      if (mq.addEventListener) mq.addEventListener('change', onMq); else mq.addListener(onMq);
+    }
+    // 열려 있는 동안 Tab 초점을 메뉴 안에서 순환
+    head.addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab' || !head.classList.contains('open')) return;
+      var f = [toggle].concat([].slice.call(head.querySelectorAll('.gnb a')));
+      var i = f.indexOf(document.activeElement);
+      if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+      else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+    });
     toggle.addEventListener('click', function () {
       var open = head.classList.toggle('open');
       toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
       toggle.querySelector('.sr').textContent = open ? '메뉴 닫기' : '메뉴 열기';
       document.body.style.overflow = open ? 'hidden' : '';
+      if (open) { var first = head.querySelector('.gnb a'); if (first) first.focus(); } else toggle.focus();
     });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && head.classList.contains('open')) toggle.click();
     });
+  }
+
+  /* 하위 메뉴: 보고 있는 구획 표시 */
+  var lnbLinks = document.querySelectorAll('.lnb a[href^="#"]');
+  if (lnbLinks.length && 'IntersectionObserver' in window) {
+    var mark = function (id) { lnbLinks.forEach(function (a) { a.setAttribute('aria-current', a.getAttribute('href') === '#' + id ? 'true' : 'false'); }); };
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) mark(e.target.id); });
+    }, { rootMargin: '-35% 0px -60% 0px' });
+    lnbLinks.forEach(function (a) { var s = document.getElementById(a.getAttribute('href').slice(1)); if (s) io.observe(s); });
   }
 
   /* 알림마당 탭 */
@@ -95,7 +126,7 @@
   }
 
   if (reduce) { frame(0); btn.hidden = true; steps.forEach(function (li) { li.classList.add('on'); }); return; }
-  var start = null, paused = false, pausedAt = 0, visible = true;
+  var start = null, paused = false, pausedAt = 0, hiddenAt = 0, visible = true;
   function loop(now) {
     if (start === null) start = now;
     if (!paused && visible) frame((now - start) % LOOP);
@@ -105,7 +136,7 @@
   btn.addEventListener('click', function () {
     paused = !paused;
     var now = performance.now();
-    if (paused) pausedAt = now; else start += now - pausedAt;
+    if (paused) pausedAt = now; else start += now - pausedAt;  // 사용자 정지 시간만큼 보정
     btn.setAttribute('aria-label', paused ? '앱 시연 재생' : '앱 시연 일시정지');
     btn.innerHTML = paused
       ? '<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9-5.5z" fill="currentColor"/></svg>'
@@ -114,8 +145,8 @@
   if ('IntersectionObserver' in window) {
     new IntersectionObserver(function (es) {
       var v = es[0].isIntersecting, now = performance.now();
-      if (!v && visible) pausedAt = now;
-      if (v && !visible && !paused) start += now - pausedAt;
+      if (!v && visible && !paused) hiddenAt = now;          // 화면 밖 정지는 따로 기록
+      if (v && !visible && !paused) start += now - hiddenAt;
       visible = v;
     }).observe(demo);
   }

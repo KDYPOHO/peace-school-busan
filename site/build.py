@@ -11,8 +11,8 @@ SITE = "https://kdypoho.github.io/peace-school-busan/home/"
 
 MENU = [
     ("about.html", "평화학교 소개", [("about.html#background", "추진 배경"), ("about.html#vision", "비전과 목표"), ("about.html#system", "운영 체계"), ("about.html#changes", "달라진 점")]),
-    ("course.html", "교육과정", [("course.html#basic", "기본과정"), ("course.html#deep", "심화과정"), ("course.html#lecturer", "강사 선정 원칙"), ("course.html#complete", "수료 기준")]),
-    ("apply.html", "참여 안내", [("apply.html#target", "참여 대상"), ("apply.html#schedule", "모집 일정"), ("apply.html#how", "신청 방법"), ("apply.html#select", "심화과정 선발"), ("apply.html#faq", "자주 묻는 질문")]),
+    ("course.html", "교육과정", [("course.html#basic", "기본과정"), ("course.html#deep", "심화과정"), ("course.html#follow", "후속 활동"), ("course.html#lecturer", "강사 선정 원칙"), ("course.html#complete", "수료 기준")]),
+    ("apply.html", "참여 안내", [("apply.html#target", "참여 대상"), ("apply.html#support", "지원 범위"), ("apply.html#schedule", "모집 일정"), ("apply.html#how", "신청 방법"), ("apply.html#select", "심화과정 선발"), ("apply.html#faq", "자주 묻는 질문")]),
     ("notice.html", "알림마당", [("notice.html#notice", "공지사항"), ("notice.html#data", "자료실")]),
     (ARCHIVE, "청년아카이브", [(ARCHIVE, "아카이브 바로가기"), ("about.html#system", "앱·아카이브 연계")]),
 ]
@@ -61,7 +61,7 @@ def head(page, meta):
 <meta property="og:url" content="{SITE}{'' if page == 'index.html' else page}">
 <meta property="og:image" content="{SITE}img/photo-sea.jpg">
 <link rel="icon" href="img/symbol.png">
-<link rel="preload" href="css/fonts/PretendardVariable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="css/fonts/Pretendard-Regular.subset.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/site.css">
 <script type="application/ld+json">{json.dumps(ld, ensure_ascii=False)}</script>
 </head>

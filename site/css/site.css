@@ -1,12 +1,18 @@
 /* 한반도 평화학교 부산 청년 과정 — 소개 누리집 (GUIDE.md 기준) */
-@font-face{font-family:"Pretendard Variable";font-weight:45 920;font-style:normal;font-display:swap;src:url(fonts/PretendardVariable.woff2) format("woff2-variations"),url(fonts/PretendardVariable.woff2) format("woff2")} /* Pretendard, SIL OFL 1.1 */
+/* Pretendard v1.3.9 공식 부분 집합(KS X 1001), SIL OFL 1.1 — css/fonts/OFL.txt */
+@font-face{font-family:"Pretendard";font-weight:400;font-style:normal;font-display:swap;src:url(fonts/Pretendard-Regular.subset.woff2) format("woff2")}
+@font-face{font-family:"Pretendard";font-weight:500;font-style:normal;font-display:swap;src:url(fonts/Pretendard-Medium.subset.woff2) format("woff2")}
+@font-face{font-family:"Pretendard";font-weight:600;font-style:normal;font-display:swap;src:url(fonts/Pretendard-SemiBold.subset.woff2) format("woff2")}
+@font-face{font-family:"Pretendard";font-weight:700;font-style:normal;font-display:swap;src:url(fonts/Pretendard-Bold.subset.woff2) format("woff2")}
+@font-face{font-family:"Pretendard";font-weight:800;font-style:normal;font-display:swap;src:url(fonts/Pretendard-ExtraBold.subset.woff2) format("woff2")}
+
 :root{
   --navy:#0F1D4A; --navy-2:#182A63; --deep:#0A1436;
   --gold:#C5A366; --gold-2:#D9BD86; --gold-ink:#8A6A2E;
   --sea:#2D5F93; --mist:#EEF2F6; --mist-2:#F6F8FA;
   --ink:#191F2B; --ink-2:#4B5565; --ink-3:#6B7484;
   --line:#DCE2EA; --line-2:#E9EDF2;
-  --font:"Pretendard Variable",Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --font:Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
   --wrap:1240px; --head:84px; --ease:cubic-bezier(.65,0,.35,1); --out:cubic-bezier(.22,1,.36,1);
 }
 *{box-sizing:border-box}
@@ -112,6 +118,7 @@ button{font:inherit;color:inherit}
 .demo-steps li.on{transform:scale(1);color:var(--navy)}
 .demo-steps li.on span{background:var(--navy);color:#fff}
 .demo-pause{position:absolute;right:0;top:24px;z-index:7;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.5);background:rgba(10,20,54,.6);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.demo-pause[hidden]{display:none}
 .demo-pause svg{width:14px;height:14px}
 @media (max-width:1020px){.demo{height:440px;margin:0 -24px}.phone{bottom:-260px}.demo-steps{left:24px;top:24px}.demo-pause{right:24px}}
 @media (max-width:1020px){.demo-steps{left:24px}.phone{left:60%}}
@@ -216,7 +223,7 @@ button{font:inherit;color:inherit}
 /* 바닥글 */
 .foot{background:var(--deep);color:#A9B3C7;font-size:14px;padding:48px 0 36px}
 .foot-top{display:flex;flex-wrap:wrap;gap:8px 24px;padding-bottom:24px;border-bottom:1px solid #22305A;margin-bottom:28px}
-.foot-top a{text-decoration:none;color:#D3DAE8}.foot-top a:hover{text-decoration:underline}
+.foot-top a{display:inline-block;padding:6px 0;text-decoration:none;color:#D3DAE8}.foot-top a:hover{text-decoration:underline}
 .foot-top a.privacy{color:var(--gold);font-weight:700}
 .foot-body{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:start}
 .foot .mark{background:#fff;border-radius:8px;padding:8px;width:84px}
@@ -275,8 +282,9 @@ tr.rest td{background:#F1F6FB;color:var(--navy);font-weight:600}
 .steps b{display:block;color:var(--navy);margin-bottom:2px}
 .steps time{display:block;font-size:13px;font-weight:600;color:var(--sea)}
 .steps span{display:block;font-size:14px;color:var(--ink-2);margin-top:6px;line-height:1.55}
-@media (max-width:1020px){.steps{grid-template-columns:repeat(3,1fr)}}
-@media (max-width:560px){.steps{grid-template-columns:1fr}}
+.steps.cols5{grid-template-columns:repeat(5,1fr)}
+@media (max-width:1020px){.steps,.steps.cols5{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:560px){.steps,.steps.cols5{grid-template-columns:1fr}}
 .faq{border-top:2px solid var(--navy)}
 .faq details{border-bottom:1px solid var(--line)}
 .faq summary{list-style:none;cursor:pointer;padding:20px 48px 20px 44px;position:relative;font-weight:700;font-size:17px}

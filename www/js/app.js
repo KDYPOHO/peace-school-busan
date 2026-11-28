@@ -11,6 +11,8 @@ const TERMS = ["제22기", "제21기"];
 const memberLabel = u => !u || !u.memberType ? "-" : u.memberType !== "자문위원" ? u.memberType : u.memberVerified === "verified" ? ("자문위원 " + (u.memberTerm || "") + " · 인증됨").replace("  ", " ") : u.memberVerified === "rejected" ? "자문위원 · 인증 반려" : "자문위원 · 인증 대기";
 const isPendingMember = u => u.memberType === "자문위원" && u.memberVerified !== "verified" && u.memberVerified !== "rejected";
 const memberFields = (d, px) => d.memberType !== "자문위원" ? "" : `<div class="row" style="gap:8px"><label class="f" style="flex:1">자문위원 기수<select id="${px}Term">${TERMS.map(t => `<option ${d.memberTerm === t ? "selected" : ""}>${t}</option>`).join("")}</select></label><label class="f" style="flex:1.4">위촉 번호 (선택)<input id="${px}MemNo" maxlength="20" value="${esc(d.memberNo || "")}" placeholder="위촉장 번호"></label></div><p class="small muted" style="margin:-4px 0 4px">자문위원은 운영진이 명단과 대조해 인증한 뒤 '인증됨'으로 표시돼요. 그전까지는 '인증 대기'예요.</p>`;
+import { initCompat } from "./compat.js";
+import { initI18n, langChips, toHelperQuery, currentLang } from "./i18n.js";
 import { privacyHtml, termsHtml, permissionsHtml, consentTable, CONSENT_REQUIRED, CONSENT_OPTIONAL, CONSENT_PHOTO } from "./legal.js";
 
 /* ───────── 공통 도구 ───────── */
@@ -268,7 +270,7 @@ async function readInboxItem(item) {
 function openInboxItem(item) {
   closeSheet();
   if (item.type === "공지") {
-    sheet(`<h2>${esc(item.title)}</h2><p class="small muted">${fmtTime(item.at)}</p><p class="inquiry-text">${esc(item.body)}</p>`);
+    sheet(`<h2><span data-noi18n>${esc(item.title)}</span></h2><p class="small muted">${fmtTime(item.at)}</p><p class="inquiry-text" data-noi18n>${esc(item.body)}</p>`);
   } else {
     if (S.role !== "p") setRole("p");
     go("ai");
@@ -282,7 +284,7 @@ function openNotices() {
   const items = inboxItems();
   sheet(`<h2>알림함</h2>
     ${(S.noticesError || S.inboxError || S.myQuestionsError) ? '<p class="small muted">일부 알림을 불러오지 못했어요.</p><button class="btn ghost mini" id="inboxRetry">다시 시도</button>' : ""}
-    ${items.length ? `<div class="list">${items.map((item, i) => `<button type="button" class="inbox-item" data-inbox-index="${i}"><span class="small muted">${item.type} · ${fmtTime(item.at)}${S.reads.has(item.key) ? "" : " · 읽지 않음"}</span><strong>${esc(item.title)}</strong></button>`).join("")}</div>` : '<p class="small muted">받은 알림이 없어요.</p>'}`);
+    ${items.length ? `<div class="list">${items.map((item, i) => `<button type="button" class="inbox-item" data-inbox-index="${i}"><span class="small muted">${item.type} · ${fmtTime(item.at)}${S.reads.has(item.key) ? "" : " · 읽지 않음"}</span><strong><span data-noi18n>${esc(item.title)}</span></strong></button>`).join("")}</div>` : '<p class="small muted">받은 알림이 없어요.</p>'}`);
   $$("#sbg [data-inbox-index]").forEach(button => { button.onclick = () => openInboxItem(items[Number(button.dataset.inboxIndex)]); });
   const retry = $("#inboxRetry");
   if (retry) retry.onclick = () => location.reload();
@@ -310,6 +312,7 @@ function renderAuth() {
   $("#root").innerHTML = `
   <div class="auth">
     <div class="logo"><img class="signature" src="img/puac-signature-ko.jpg" alt="민주평화통일자문회의"><b>${esc(APP.displayName)}</b><span>${esc(APP.cohortName)}</span>${testLabel()}</div>
+    <div style="display:flex;justify-content:center;margin:-4px 0 12px">${langChips()}</div>
     <section class="card">
       <h2 style="margin:0 0 4px">${deletionPage ? "계정 및 데이터 삭제" : signup ? "회원가입" : "로그인"}</h2>
       <p class="small muted" style="margin:0 0 12px">${deletionPage ? "삭제하려는 계정으로 로그인한 뒤 삭제를 확인해 주세요." : signup ? "이메일과 비밀번호로 계정을 만든 뒤 수강 신청서를 작성해요." : "수강 신청, QR 출석, 수료증을 앱 하나로 관리해요."}</p>
@@ -354,7 +357,7 @@ function renderAuth() {
   };
 }
 
-function legalSheet(html) { sheet(`<div class="legal">${html}</div>`); }
+function legalSheet(html) { sheet(`${currentLang() === "en" ? `<p class="small muted" style="margin:0 0 12px">This document is provided in Korean, which is the official version. If anything is unclear, ask staff from the Attendance tab.</p>` : ""}<div class="legal" data-noi18n>${html}</div>`); }
 function privacySheet() { legalSheet(privacyHtml()); }
 function termsSheet() { legalSheet(termsHtml()); }
 function permSheet() { legalSheet(`<h1>앱 접근권한 안내</h1>${permissionsHtml()}`); }
@@ -516,7 +519,7 @@ function updateInquiryBadge() {
 
 function inquiryReply(q) {
   if (!q.answer) return "";
-  return `<div class="ai-box inquiry-reply"><b>운영진 답변</b><div class="inquiry-text">${esc(q.answer)}</div>${q.answeredAt ? `<div class="small muted">${fmtTime(q.answeredAt)}</div>` : ""}</div>`;
+  return `<div class="ai-box inquiry-reply"><b>운영진 답변</b><div class="inquiry-text" data-noi18n>${esc(q.answer)}</div>${q.answeredAt ? `<div class="small muted">${fmtTime(q.answeredAt)}</div>` : ""}</div>`;
 }
 
 const VIEWS = {
@@ -550,7 +553,7 @@ const VIEWS = {
     </section>
     <section class="card">
       <div class="row between"><h2 style="margin:0">공지</h2><button class="btn ghost mini" id="allNoti">알림함</button></div>
-      ${ns.length ? `<div class="list" style="margin-top:8px">${ns.map(n => `<div class="li"><div class="dot">${ic("send", 16)}</div><div class="body"><div class="small k">${esc(n.title)}</div><div class="small muted">${fmtTime(n.at)}</div></div></div>`).join("")}</div>` : '<p class="small muted" style="margin:8px 0 0">아직 공지가 없어요. 새 공지가 오면 종 모양에 점이 생겨요.</p>'}
+      ${ns.length ? `<div class="list" style="margin-top:8px">${ns.map(n => `<div class="li"><div class="dot">${ic("send", 16)}</div><div class="body"><div class="small k"><span data-noi18n>${esc(n.title)}</span></div><div class="small muted">${fmtTime(n.at)}</div></div></div>`).join("")}</div>` : '<p class="small muted" style="margin:8px 0 0">아직 공지가 없어요. 새 공지가 오면 종 모양에 점이 생겨요.</p>'}
     </section>
     ${S.profile.privacyVersion !== APP.privacyVersion || S.profile.termsVersion !== APP.termsVersion ? `<section class="card"><div class="row between"><h2 style="margin:0">처리방침·약관이 바뀌었어요</h2><span class="pill p-warn">확인 필요</span></div><p class="small muted" style="margin:6px 0 10px">바뀐 내용을 확인해 주세요. 동의하지 않으면 내 정보에서 탈퇴할 수 있어요.</p><div class="row wrap" style="gap:8px"><button class="btn ghost mini" id="vPv">처리방침</button><button class="btn ghost mini" id="vTm">이용약관</button><button class="btn mini" id="vOk">확인했어요</button></div></section>` : ""}
     ${deepCard()}
@@ -582,7 +585,7 @@ const VIEWS = {
     return `
     <section class="card" style="text-align:center">
       <div class="eyebrow">${tl ? `${tl.n}강 현장 출석 · 개인 QR` : "개인 QR 수강증"}</div>
-      <h2 style="margin:6px 0 2px">${esc(p.name)}</h2>
+      <h2 style="margin:6px 0 2px"><span data-noi18n>${esc(p.name)}</span></h2>
       <div class="small muted">수강번호 ${esc(p.no)}</div>
       <div class="qr qr-pass" role="img" aria-label="출석용 QR 수강증">${qrSvg("PSB1:" + S.user.uid)}</div>
       <button class="btn ghost mini" id="copyEnrollmentNo" type="button">수강번호 복사</button>
@@ -617,11 +620,11 @@ const VIEWS = {
     <section class="card inquiry-card">
       <h2>내 문의</h2>
       ${S.myQuestionsError ? '<p class="err" role="status">문의 내역을 불러오지 못했어요. 연결을 확인한 뒤 앱을 다시 열어 주세요.</p>' : ""}
-      <div class="list">${S.myQs.map(q => `<article class="li" id="reply-${esc(q.id)}" tabindex="-1"><div class="body"><div class="row between"><span class="small muted">${fmtTime(q.at)}</span><span class="pill ${q.answer ? "p-ok" : "p-mute"}">${q.answer ? "답변 완료" : "답변 대기"}</span></div><div class="inquiry-text">${esc(q.text)}</div>${inquiryReply(q)}</div></article>`).join("") || '<p class="small muted">보낸 문의와 운영진 답변을 여기에서 확인할 수 있어요.</p>'}</div>
+      <div class="list">${S.myQs.map(q => `<article class="li" id="reply-${esc(q.id)}" tabindex="-1"><div class="body"><div class="row between"><span class="small muted">${fmtTime(q.at)}</span><span class="pill ${q.answer ? "p-ok" : "p-mute"}">${q.answer ? "답변 완료" : "답변 대기"}</span></div><div class="inquiry-text" data-noi18n>${esc(q.text)}</div>${inquiryReply(q)}</div></article>`).join("") || '<p class="small muted">보낸 문의와 운영진 답변을 여기에서 확인할 수 있어요.</p>'}</div>
     </section>
     <section class="card">
       <div class="row between"><h2 style="margin:0">학습 도우미</h2><span class="small muted">공식 안내 기반 · 무료</span></div>
-      <div class="chat" id="chat" style="margin-top:10px">${S.chat.map((m, k) => `<div class="msg ${m.who}" ${k < S.chat.length - 1 ? 'style="animation:none"' : ""}>${esc(m.text)}${m.src ? `<small>근거: ${esc(m.src)}</small>` : ""}${m.ask ? `<div style="margin-top:8px"><button class="btn mini" data-askq="${k}">운영진에게 물어보기</button></div>` : ""}</div>`).join("")}</div>
+      <div class="chat" id="chat" style="margin-top:10px">${S.chat.map((m, k) => `<div class="msg ${m.who}" ${m.who === "me" ? "data-noi18n" : ""} ${k < S.chat.length - 1 ? 'style="animation:none"' : ""}>${esc(m.text)}${m.src ? `<small>근거: ${esc(m.src)}</small>` : ""}${m.ask ? `<div style="margin-top:8px"><button class="btn mini" data-askq="${k}">운영진에게 물어보기</button></div>` : ""}</div>`).join("")}</div>
       <div class="chips" style="margin:12px 0 10px">${FAQ_CHIPS.map(q => `<button class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
       <form class="composer" id="chatForm"><input id="chatIn" maxlength="300" placeholder="수료, 일정, 출석, 심화과정 등을 물어보세요" autocomplete="off" aria-label="질문"><button class="btn" type="submit">보내기</button></form>
     </section>`;
@@ -630,7 +633,7 @@ const VIEWS = {
     const p = S.profile, att = myAttended(), ok = att.length >= PASS_COUNT, issued = ok && courseEnded();
     return `
     <section class="card">
-      <div class="row between"><h2 style="margin:0">${esc(p.name)}</h2><span class="pill p-gold">${esc(p.no)}</span></div>
+      <div class="row between"><h2 style="margin:0"><span data-noi18n>${esc(p.name)}</span></h2><span class="pill p-gold">${esc(p.no)}</span></div>
       <dl class="kv" style="margin-top:10px"><dt>이메일</dt><dd>${esc(p.email || S.user.email)}</dd><dt>민주평통</dt><dd>${esc(affiliationLabel(p))} · ${esc(memberLabel(p))}</dd><dt>지역</dt><dd>${esc(p.region)}</dd><dt>소속</dt><dd>${esc(p.org || "-")}</dd><dt>연락처</dt><dd>${esc(p.phone || "-")}</dd><dt>참여</dt><dd>${p.mode === "online" ? "온라인" : "부산 현장"}</dd><dt>선택 동의</dt><dd>연락처·소속 ${p.optionalConsent ? "동의" : "미동의"} · 사진 ${p.photoConsent ? "동의" : "미동의"}</dd></dl>
       <button class="btn ghost block" style="margin-top:12px" id="editBtn">정보 수정 · 동의 변경</button>
     </section>
@@ -645,6 +648,7 @@ const VIEWS = {
       <div class="list">
         <div class="li"><div class="body"><div class="k small">큰 글씨</div><div class="small muted">글자를 키워 읽기 편하게</div></div><label class="toggle" aria-label="큰 글씨"><input type="checkbox" id="lgT" ${LS.get("large", false) ? "checked" : ""}><span></span></label></div>
         <div class="li"><div class="body"><div class="k small">화면 테마</div></div><div class="chips">${[["system", "자동"], ["light", "밝게"], ["dark", "어둡게"]].map(([k, l]) => `<button class="chip" data-theme-set="${k}" aria-pressed="${LS.get("theme", "system") === k}">${l}</button>`).join("")}</div></div>
+        <div class="li"><div class="body"><div class="k small">언어 · Language</div></div>${langChips()}</div>
       </div>
     </section>
     ${archiveCard()}
@@ -716,7 +720,7 @@ const VIEWS = {
     return `
     <section class="card">
       <div class="row between"><h2 style="margin:0">가입 승인 대기</h2><span class="pill p-warn">${approvals.length}명</span></div>
-      <div class="list">${approvals.length ? approvals.map(u => `<article class="li"><div class="body"><b>${esc(u.name)}</b><div class="small muted">${esc(u.email)} · ${esc(affiliationLabel(u))}</div><div class="small muted">${fmtTime(u.createdAt)}</div></div><button class="btn mini" type="button" data-approve-profile="${esc(u.uid)}">가입 승인</button></article>`).join("") : '<p class="small muted">확인할 가입 신청이 없어요.</p>'}</div>
+      <div class="list">${approvals.length ? approvals.map(u => `<article class="li"><div class="body"><b><span data-noi18n>${esc(u.name)}</span></b><div class="small muted">${esc(u.email)} · ${esc(affiliationLabel(u))}</div><div class="small muted">${fmtTime(u.createdAt)}</div></div><button class="btn mini" type="button" data-approve-profile="${esc(u.uid)}">가입 승인</button></article>`).join("") : '<p class="small muted">확인할 가입 신청이 없어요.</p>'}</div>
     </section>
     <section class="card">
       <div class="row between"><h2 style="margin:0">참가자</h2><span class="small muted num">${rows.length} / ${S.users.length}명</span></div>
@@ -725,7 +729,7 @@ const VIEWS = {
       <div class="chips" style="margin-top:10px">${[["all", "전체"], ["pass", "수료 요건 충족"], ["risk", "수료 위험"], ["lost", "수료 불가"], ["online", "온라인"], ["verify", `자문위원 인증 대기 ${S.users.filter(isPendingMember).length}`]].map(([k, l]) => `<button class="chip" data-pf="${k}" aria-pressed="${f === k}">${l}</button>`).join("")}</div>
     </section>
     <section class="card" style="padding-top:6px">
-      <div class="list" id="pList">${rows.length ? rows.slice(0, 300).map(u => `<button class="li" data-user="${esc(u.uid)}" style="width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0;cursor:pointer"><div class="body"><div class="k">${esc(u.name)} <span class="small muted" style="font-weight:400">${esc(affiliationLabel(u))}${u.org ? " · " + esc(u.org) : ""}</span></div><div class="small muted">${esc(u.no)} · ${esc(memberLabel(u))} · ${u.mode === "online" ? "온라인" : "현장"}${S.staffList.some(s => s.id === u.uid) ? " · 운영진" : ""}</div></div><span class="pill ${u.att.length >= PASS_COUNT ? "p-ok" : u.att.length + u.rem < PASS_COUNT ? "p-bad" : "p-mute"} num">${u.att.length}/${LECTURES.length}</span></button>`).join("") : '<p class="small muted">조건에 맞는 참가자가 없어요.</p>'}</div>
+      <div class="list" id="pList">${rows.length ? rows.slice(0, 300).map(u => `<button class="li" data-user="${esc(u.uid)}" style="width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0;cursor:pointer"><div class="body"><div class="k"><span data-noi18n>${esc(u.name)}</span> <span class="small muted" style="font-weight:400">${esc(affiliationLabel(u))}${u.org ? " · " + esc(u.org) : ""}</span></div><div class="small muted">${esc(u.no)} · ${esc(memberLabel(u))} · ${u.mode === "online" ? "온라인" : "현장"}${S.staffList.some(s => s.id === u.uid) ? " · 운영진" : ""}</div></div><span class="pill ${u.att.length >= PASS_COUNT ? "p-ok" : u.att.length + u.rem < PASS_COUNT ? "p-bad" : "p-mute"} num">${u.att.length}/${LECTURES.length}</span></button>`).join("") : '<p class="small muted">조건에 맞는 참가자가 없어요.</p>'}</div>
     </section>`;
   },
   scan() {
@@ -759,7 +763,7 @@ const VIEWS = {
       <div class="chips inquiry-filters">${[["open", "답변 대기", open.length], ["answered", "답변 완료", answered.length]].map(([id, label, count]) => `<button class="chip" data-help-filter="${id}" aria-pressed="${id === S.helpFilter}">${label} ${count}건</button>`).join("")}</div>
       <div class="list">${shown.slice(0, S.helpLimit).map(q => {
         const u = S.users.find(x => x.uid === q.uid), sending = S.answerSending.has(q.id);
-        return `<article class="li"><div class="body"><div class="small muted">${esc(u ? u.name + " · " + u.no : "참가자")} · ${fmtTime(q.at)}</div><div class="inquiry-text">${esc(q.text)}</div>${q.answer ? inquiryReply(q) : `<form class="form inquiry-reply" data-ans="${esc(q.id)}"><label class="f">답변<textarea rows="3" maxlength="500" required>${esc(S.answerDrafts[q.id])}</textarea></label><p class="err" role="alert" ${S.answerErrors[q.id] ? "" : "hidden"}>${esc(S.answerErrors[q.id])}</p><button class="btn" type="submit" ${sending ? "disabled" : ""}>${sending ? "보내는 중…" : S.answerErrors[q.id] ? "다시 보내기" : "답변 보내기"}</button></form>`}</div></article>`;
+        return `<article class="li"><div class="body"><div class="small muted">${esc(u ? u.name + " · " + u.no : "참가자")} · ${fmtTime(q.at)}</div><div class="inquiry-text" data-noi18n>${esc(q.text)}</div>${q.answer ? inquiryReply(q) : `<form class="form inquiry-reply" data-ans="${esc(q.id)}"><label class="f">답변<textarea rows="3" maxlength="500" required>${esc(S.answerDrafts[q.id])}</textarea></label><p class="err" role="alert" ${S.answerErrors[q.id] ? "" : "hidden"}>${esc(S.answerErrors[q.id])}</p><button class="btn" type="submit" ${sending ? "disabled" : ""}>${sending ? "보내는 중…" : S.answerErrors[q.id] ? "다시 보내기" : "답변 보내기"}</button></form>`}</div></article>`;
       }).join("") || `<p class="small muted">${S.helpFilter === "open" ? "답변을 기다리는 문의가 없어요." : "답변한 문의가 없어요."}</p>`}</div>
       ${shown.length > S.helpLimit ? '<button class="btn ghost block" id="moreInquiries">문의 더 보기</button>' : ""}
     </section>
@@ -776,7 +780,7 @@ const VIEWS = {
     </section>
     <section class="card">
       <h2>올린 공지</h2>
-      <div class="list small">${S.notices.map(n => `<div class="li"><div class="body"><div class="k">${esc(n.title)}</div><div class="muted">${fmtTime(n.at)} · ${n.audience === "deep" ? "심화 선발자" : "전체"}</div></div><button class="btn ghost mini" data-delnoti="${esc(n.id)}" data-audience="${n.audience === "deep" ? "deep" : "all"}">삭제</button></div>`).join("") || '<p class="muted">아직 올린 공지가 없어요.</p>'}</div>
+      <div class="list small">${S.notices.map(n => `<div class="li"><div class="body"><div class="k"><span data-noi18n>${esc(n.title)}</span></div><div class="muted">${fmtTime(n.at)} · ${n.audience === "deep" ? "심화 선발자" : "전체"}</div></div><button class="btn ghost mini" data-delnoti="${esc(n.id)}" data-audience="${n.audience === "deep" ? "deep" : "all"}">삭제</button></div>`).join("") || '<p class="muted">아직 올린 공지가 없어요.</p>'}</div>
     </section>`;
   },
   deep() {
@@ -846,7 +850,7 @@ function deepForm() {
     <label class="f">관심 분야<select id="dTheme">${["교육·콘텐츠", "지역 연계", "국제·외교", "미디어", "사회 통합", "기타"].map(t => `<option ${a.theme === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
     <label class="f">해커톤에서 해보고 싶은 것 (100~800자)<textarea id="dEssay" rows="5" maxlength="800" required>${esc(a.essay || "")}</textarea></label>
     <div class="small muted" id="dCnt" style="text-align:right;margin-top:-6px">0자</div>
-    <label class="f">부산 도착 예정<select id="dArr">${["8. 13.(금) 11시 이전 도착", "8. 13.(금) 11시~12시 도착", "부산·경남 거주 (직접 이동)", "아직 모름"].map(t => `<option ${a.arrival === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+    <label class="f">부산 도착 예정<select id="dArr">${["8. 13.(금) 11시 집결 전 도착", "8. 13.(금) 11시 이후 도착 (늦게 합류)", "부산·경남 거주 (직접 이동)", "아직 모름"].map(t => `<option ${a.arrival === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
     ${S.deepApp ? "" : '<label class="check"><input type="checkbox" id="dOk"> 2박3일 전 일정에 참여할 수 있으며, 선발 후 불참 시 다음 예비자에게 기회가 넘어가는 데 동의합니다.</label>'}
     <p class="err" id="dErr" role="alert"></p>
     <button class="btn" type="submit">${S.deepApp ? "고친 내용 저장" : "지원서 제출"}</button>
@@ -868,11 +872,11 @@ function deepForm() {
 }
 function certHtml(p, locked) {
   const end = lastCourseLecture().date.split("-").map(Number);
-  return `<div class="cert ${locked ? "locked" : ""}">
+  return `<div class="cert ${locked ? "locked" : ""}" data-noi18n>
     <div class="watermark"><img src="img/symbol.png" alt=""></div>
     <div class="no">제 ${APP.year}-부산청년-${esc(String(p.no).replace(/^BS\d+-/, ""))} 호</div>
     <h4>수료증</h4>
-    <div class="who">성&emsp;&emsp;명 : ${esc(p.name)}<br>${p.org ? `소&emsp;&emsp;속 : ${esc(p.org)}<br>` : ""}과&emsp;&emsp;정 : 기본과정 (${LECTURES.length}강)</div>
+    <div class="who">성&emsp;&emsp;명 : <span data-noi18n>${esc(p.name)}</span><br>${p.org ? `소&emsp;&emsp;속 : ${esc(p.org)}<br>` : ""}과&emsp;&emsp;정 : 기본과정 (${LECTURES.length}강)</div>
     <p>위 사람은 ${esc(APP.org)}가 주관한 「${APP.year} ${esc(APP.name)} · ${esc(APP.cohortName)}」 기본과정을 성실히 이수하였기에 이 증서를 수여합니다.</p>
     <div class="date">${end[0]}년 ${end[1]}월 ${end[2]}일</div>
     <div class="issuer"><img src="img/symbol.png" alt="">${esc(APP.org)}</div>
@@ -925,7 +929,7 @@ function ask(q) {
   setTimeout(() => {
     busy = false;
     if (S.user !== viewer) return;
-    const r = faqAnswer(q, { att: myAttended(), profile: S.profile, deepApp: S.deepApp, deepDeadline: S.deepDeadline, next: nextLecture(), fmtDate });
+    const r = faqAnswer(toHelperQuery(q), { att: myAttended(), profile: S.profile, deepApp: S.deepApp, deepDeadline: S.deepDeadline, next: nextLecture(), fmtDate });
     S.chat.push({ who: "ai", text: r.a, src: r.src, ask: r.unknown ? q : null }); render();
     const c2 = $("#chat"); c2 && c2.lastElementChild.scrollIntoView({ block: "nearest", behavior: RM ? "auto" : "smooth" });
   }, RM ? 0 : 650);
@@ -1018,7 +1022,7 @@ async function copyText(t, msg, el) {
 function userSheet(uid) {
   const u = S.users.find(x => x.uid === uid); if (!u) return;
   const att = attOf(uid), isSt = S.staffList.some(s => s.id === uid), d = S.deepApps.find(a => a.uid === uid);
-  sheet(`<div class="row between"><h2 style="margin:0;font-size:1.05rem">${esc(u.name)}</h2><span class="pill p-gold">${esc(u.no)}</span></div>
+  sheet(`<div class="row between"><h2 style="margin:0;font-size:1.05rem"><span data-noi18n>${esc(u.name)}</span></h2><span class="pill p-gold">${esc(u.no)}</span></div>
   <dl class="kv" style="margin-top:10px"><dt>이메일</dt><dd>${esc(u.email)}</dd><dt>출생</dt><dd>${esc(u.birthYear)}년</dd><dt>민주평통</dt><dd>${esc(affiliationLabel(u))}</dd><dt>구분</dt><dd>${esc(memberLabel(u))}${u.memberType === "자문위원" && u.memberNo ? ` · 위촉 번호 ${esc(u.memberNo)}` : ""}</dd><dt>지역</dt><dd>${esc(u.region)}</dd><dt>소속</dt><dd>${esc(u.org || "-")}</dd><dt>연락처</dt><dd>${esc(u.phone || "-")}</dd><dt>참여</dt><dd>${u.mode === "online" ? "온라인" : "현장"}</dd><dt>사진 동의</dt><dd>${u.photoConsent ? "동의" : "미동의"}</dd><dt>심화</dt><dd>${d ? DEEP_STATUS[d.status] : "미지원"}</dd></dl>
   <h3 style="margin:14px 0 6px;font-size:.9rem">출결 (눌러서 수동 처리)</h3>
   <div class="row" style="gap:6px">${LECTURES.map(l => `<button class="dot ${att.includes(l.n) ? "done" : ""}" style="flex:1;border:0;cursor:pointer" data-man="${l.n}" aria-pressed="${att.includes(l.n)}" aria-label="${l.n}강 ${att.includes(l.n) ? "출석 취소" : "출석 처리"}">${l.n}</button>`).join("")}</div>
@@ -1273,7 +1277,7 @@ const BIND = {
   },
   dash() {
     const st = stats();
-    $("#riskBtn").onclick = () => sheet(`<h2 style="margin:0 0 8px;font-size:1.05rem">수료 위험 ${st.risk.length}명</h2><p class="small muted" style="margin:0 0 10px">남은 강의를 모두 출석해야 수료할 수 있어요.</p><div class="list small">${st.risk.map(x => `<div class="li"><div class="body"><div class="k">${esc(x.u.name)} · ${esc(x.u.no)}</div><div class="muted">${esc(x.u.phone || x.u.email)}</div></div><span class="pill p-warn">${x.att.length}/${LECTURES.length}</span></div>`).join("")}</div>`);
+    $("#riskBtn").onclick = () => sheet(`<h2 style="margin:0 0 8px;font-size:1.05rem">수료 위험 ${st.risk.length}명</h2><p class="small muted" style="margin:0 0 10px">남은 강의를 모두 출석해야 수료할 수 있어요.</p><div class="list small">${st.risk.map(x => `<div class="li"><div class="body"><div class="k"><span data-noi18n>${esc(x.u.name)}</span> · ${esc(x.u.no)}</div><div class="muted">${esc(x.u.phone || x.u.email)}</div></div><span class="pill p-warn">${x.att.length}/${LECTURES.length}</span></div>`).join("")}</div>`);
     $("#nudgeBtn").onclick = () => { S.notiDraft = { title: "[수료 안내] 남은 강의를 꼭 챙겨 주세요", body: "남은 강의를 모두 들으면 수료할 수 있어요. 현장 참석이 어렵다면 온라인 출석도 인정돼요." }; go("noti"); };
     $("#csvBtn").onclick = csvExport;
     $("#reportBtn").onclick = reportDraft;
@@ -1320,7 +1324,9 @@ const BIND = {
       const form = e.currentTarget, field = $("#manualNo"), button = form.querySelector("button");
       if (button.disabled) return;
       const no = field.value.trim().toUpperCase();
-      const u = S.users.find(x => String(x.no).toUpperCase() === no);
+      const found = S.users.filter(x => String(x.no).toUpperCase() === no);
+      if (found.length > 1) { showScanResult("같은 수강번호가 여러 명이에요. QR로 출석하거나 참가자 탭에서 이름을 눌러 처리해 주세요.", "warn"); return; }
+      const u = found[0];
       if (!u) { showScanResult("수강번호를 찾지 못했어요. 번호를 확인해 주세요.", "warn"); return; }
       button.disabled = true;
       const revision = S.scanRevision || 0;
@@ -1494,6 +1500,8 @@ async function onSignedIn(u) {
     const deepApp = isApprovedProfile(profile) || (staff && profile) ? await B.getDeepApp() : null;
     if (S.user?.uid !== u.uid) return;
     Object.assign(S, { profile, staff, deepApp });
+    // 통신이 약한 현장에서도 QR 수강증을 띄울 수 있도록 이름과 수강번호만 기기에 남긴다
+    try { if (isApprovedProfile(profile)) localStorage.setItem("psb_pass", JSON.stringify({ uid: u.uid, name: profile.name, no: profile.no })); } catch (e) {}
   } catch {
     if (S.user?.uid === u.uid) connectionError(() => onSignedIn(u));
     return;
@@ -1563,13 +1571,21 @@ window.addEventListener("online", offlineBanner); window.addEventListener("offli
 
 function connectionError(retry) {
   $("#splash")?.remove();
+  let pass = null;
+  try { pass = JSON.parse(localStorage.getItem("psb_pass") || "null"); } catch (e) {}
+  if (!pass || !S.user || pass.uid !== S.user.uid) pass = null;
   $("#root").innerHTML = `<div class="auth"><section class="card"><h2>서버에 연결하지 못했어요</h2>
     <p class="small muted">인터넷 연결을 확인한 뒤 다시 시도해 주세요.</p>
-    <button class="btn block" id="retryConnection">다시 시도</button></section></div>`;
+    <button class="btn block" id="retryConnection">다시 시도</button></section>
+    ${pass ? `<section class="card" style="text-align:center"><h2 style="margin:0 0 4px">QR 수강증</h2><p class="small muted" style="margin:0 0 10px">인터넷이 없어도 입구에서 이 QR을 보여 주면 돼요.</p>
+      <div class="qr qr-pass" role="img" aria-label="출석용 QR 수강증">${qrSvg("PSB1:" + pass.uid)}</div>
+      <p style="margin:10px 0 0"><b data-noi18n>${esc(pass.name)}</b> · ${esc(pass.no)}</p></section>` : ""}</div>`;
   $("#retryConnection").onclick = retry;
 }
 
 async function boot() {
+  initCompat();
+  initI18n();
   $("#root").innerHTML = '<div class="auth"><p class="note" role="status">서버 연결 중…</p></div>';
   try {
     B = await createBackend();
@@ -1598,7 +1614,7 @@ async function boot() {
       myQuestionsError: false, staffQuestionsError: false, helpDraft: "", helpRequest: null, helpSending: false,
       answerDrafts: {}, answerErrors: {}, answerSending: new Set(), helpFilter: "open", helpLimit: 25
     });
-    if (u) await onSignedIn(u); else renderAuth();
+    if (u) await onSignedIn(u); else { try { localStorage.removeItem("psb_pass"); } catch (e) {} renderAuth(); }
     finishSplash();
   });
   offlineBanner();

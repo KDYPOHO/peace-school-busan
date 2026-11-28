@@ -69,7 +69,7 @@ async function openFixtureLecture() {
 }
 
 async function openPage(browser, device, url, options = {}) {
-  const context = await browser.newContext({ ...device, reducedMotion: 'reduce', ...options });
+  const context = await browser.newContext({ ...device, reducedMotion: 'reduce', locale: 'ko-KR', ...options });
   context.setDefaultTimeout(12_000);
   await context.route('**/*', route =>
     new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());

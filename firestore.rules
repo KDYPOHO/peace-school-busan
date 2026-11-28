@@ -18,6 +18,7 @@ service cloud.firestore {
     function canUseCourse() {
       return signedIn() && (isStaff() || approvedParticipant(me()));
     }
+    function enrollNo() { return 'BS27-' + me()[0:6].upper(); }
     function onlyChanges(keys) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
@@ -41,7 +42,14 @@ service cloud.firestore {
         // 자문위원 인증은 운영진만: 본인은 '인증 대기'까지만 쓸 수 있음
         && request.resource.data.get('memberVerified', '') in ['', 'pending']
         && request.resource.data.get('approvalStatus', '') == 'pending'
-        && !request.resource.data.keys().hasAny(['approvedAt', 'approvedBy']);
+        && !request.resource.data.keys().hasAny(['approvedAt', 'approvedBy'])
+        // 신청서에 들어갈 수 있는 항목만 허용
+        && request.resource.data.keys().hasOnly(['name', 'birthYear', 'phone', 'region', 'orgRegion', 'orgCouncil', 'memberType', 'memberVerified', 'memberTerm', 'memberNo', 'org', 'mode', 'optionalConsent', 'photoConsent', 'termsAgreed', 'privacyVersion', 'termsVersion', 'no', 'email', 'consent', 'consentAt', 'createdAt', 'approvalStatus'])
+        // 수강번호는 계정 ID에서 정해지는 값만: 남의 번호를 흉내 낼 수 없게
+        && request.resource.data.get('no', enrollNo()) == enrollNo()
+        // 선택 동의가 없으면 휴대폰 번호·소속은 비워 둔다
+        && (request.resource.data.get('optionalConsent', false) == true || (request.resource.data.get('phone', '') == '' && request.resource.data.get('org', '') == ''))
+        && (!('email' in request.resource.data) || request.resource.data.email == request.auth.token.get('email', ''));
       allow update: if (isStaff() &&
           (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['approvalStatus', 'approvedAt', 'approvedBy'])
            || (resource.data.get('approvalStatus', '') == 'pending'
@@ -50,6 +58,10 @@ service cloud.firestore {
                && request.resource.data.get('approvedAt', null) == request.time
                && request.resource.data.get('approvedBy', '') == me())))
         || (signedIn() && uid == me()
+            && request.resource.data.name is string
+            && request.resource.data.name.size() > 0
+            && request.resource.data.name.size() <= 40
+            && (request.resource.data.get('optionalConsent', false) == true || (request.resource.data.get('phone', '') == '' && request.resource.data.get('org', '') == ''))
             && onlyChanges(['name', 'org', 'region', 'phone', 'mode', 'birthYear', 'updatedAt', 'largeText', 'optionalConsent', 'photoConsent', 'privacyVersion', 'termsVersion', 'orgRegion', 'orgCouncil', 'memberType', 'memberTerm', 'memberNo', 'memberVerified'])
             && (request.resource.data.get('memberVerified', '') == resource.data.get('memberVerified', '')
                 || request.resource.data.get('memberVerified', '') in ['', 'pending']));

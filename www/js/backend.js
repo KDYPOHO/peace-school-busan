@@ -19,10 +19,9 @@ export async function keepFirstAnswer(save, readCurrent) {
 }
 export const isNative = typeof window !== "undefined" && window.Capacitor?.isNativePlatform?.() === true;
 
-function makeNo() {
-  const t = Date.now().toString(36).slice(-4).toUpperCase();
-  const r = Math.random().toString(36).slice(2, 4).toUpperCase();
-  return `BS27-${t}${r}`;
+// 수강번호 = 계정 ID 앞 6자리 (보안 규칙이 같은 값만 허용해 남의 번호를 쓸 수 없다)
+function makeNo(uid) {
+  return `BS27-${String(uid || "").slice(0, 6).toUpperCase()}`;
 }
 
 /* ───────────────────────── Firebase ───────────────────────── */
@@ -143,7 +142,7 @@ async function firebaseBackend(settings, emulator) {
     },
     async createProfile(p) {
       const ref = doc(db, "users", api.user.uid);
-      const data = { ...p, no: makeNo(), email: api.user.email, consent: true, consentAt: ts(), createdAt: ts(), approvalStatus: "pending" };
+      const data = { ...p, no: makeNo(api.user.uid), email: api.user.email, consent: true, consentAt: ts(), createdAt: ts(), approvalStatus: "pending" };
       ensureOnline();
       return transaction(async tx => {
         const existing = (await tx.get(ref)).data();
@@ -335,7 +334,7 @@ function demoBackend() {
       return () => listeners.delete(refresh);
     },
     async createProfile(p) {
-      const data = { ...p, no: makeNo(), email: api.user.email, consent: true, consentAt: Date.now(), createdAt: Date.now(), approvalStatus: "pending" };
+      const data = { ...p, no: makeNo(api.user.uid), email: api.user.email, consent: true, consentAt: Date.now(), createdAt: Date.now(), approvalStatus: "pending" };
       D.users[api.user.uid] ||= data;
       save();
       return D.users[api.user.uid];

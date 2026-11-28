@@ -160,7 +160,7 @@ public class AppLaunchTest {
     private void openDemo(ActivityScenario<MainActivity> scenario) {
         scenario.onActivity(activity -> {
             var bridge = activity.getBridge();
-            bridge.getWebView().loadUrl(bridge.getLocalUrl() + "/?demo=1");
+            bridge.getWebView().loadUrl(bridge.getLocalUrl() + "/?demo=1&lang=ko");
         });
     }
 

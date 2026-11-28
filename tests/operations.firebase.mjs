@@ -56,7 +56,12 @@ test('새 가입은 운영진이 한 번 승인할 때까지 과정 데이터에
   await assertFails(getDoc(doc(applicant, 'courseSchedule', '1')));
   await assertFails(setDoc(profile, { name: '가상 신규 참가자', consent: true }));
   await assertFails(setDoc(profile, { name: '가상 신규 참가자', consent: true, approvalStatus: 'approved' }));
-  await assertSucceeds(setDoc(profile, { name: '가상 신규 참가자', consent: true, approvalStatus: 'pending' }));
+  // 수강번호는 계정 ID에서 정해진 값만, 허용 목록 밖의 항목과 동의 없는 연락처는 거부
+  await assertFails(setDoc(profile, { name: '가상 신규 참가자', consent: true, approvalStatus: 'pending', no: 'BS27-ALICE1' }));
+  await assertFails(setDoc(profile, { name: '가상 신규 참가자', consent: true, approvalStatus: 'pending', role: 'admin' }));
+  await assertFails(setDoc(profile, { name: '가상 신규 참가자', consent: true, approvalStatus: 'pending', optionalConsent: false, phone: '010-0000-0000' }));
+  await assertSucceeds(setDoc(profile, { name: '가상 신규 참가자', consent: true, approvalStatus: 'pending', no: 'BS27-' + uid.slice(0, 6).toUpperCase() }));
+  await assertFails(updateDoc(profile, { name: '' }));
   assert.equal((await getDoc(profile)).data().approvalStatus, 'pending');
   await assertFails(approve(applicant, uid));
   await assertFails(deleteDoc(doc(applicant, 'staff', uid)));

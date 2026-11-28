@@ -23,7 +23,7 @@ jobs:
         env:
           PSB_BUILD_MODE: production
       - name: 소개 누리집(site/)을 /home/ 경로에 함께 배포
-        run: mkdir -p www/home && cp -R site/. www/home/
+        run: python3 site/build.py && mkdir -p www/home && cp -R site/*.html site/css site/js site/img www/home/
       - uses: actions/configure-pages@v5
         with: { enablement: true }
       - uses: actions/upload-pages-artifact@v3

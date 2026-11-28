@@ -183,7 +183,7 @@ def check_text(path: Path, lines: list[str], rules: dict, kind: str, out: list[F
                 out.append(Finding("경고", "legal", rp, no, "정치 중립", f"정치 관련 표현 '{w}' — 사실 서술인지, 삭제 가능한지 확인"))
         # 과장 표현 (홍보팀)
         for w in rules["hype_terms"]:
-            if w in line:
+            if w in line and not any(n in line for n in rules.get("hype_negations", [])):
                 out.append(Finding("경고", "marketing", rp, no, "과장 표현", f"과장·단정 표현 '{w}'"))
         # 날짜 표기 (대외협력·운영팀)
         for m in LOOSE_DATE_RE.finditer(line):
@@ -250,8 +250,242 @@ def check_logo_image(path: Path, rules: dict, out: list[Finding]) -> None:
                            f"가로세로비 {ratio:.3f} — 가장 가까운 공식 원본({best_name} {best:.3f})과 {diff:.1%} 차이 (비율 변형 의심)"))
 
 
+# ---------------------------------------------------------------- 추가 정밀 점검
+import datetime as _dt
+
+WEEKDAYS = "월화수목금토일"
+FULL_DAY_RE = re.compile(r"(20\d{2})\.\s?(\d{1,2})\.\s?(\d{1,2})\.?\s?\(([월화수목금토일])\)")
+SHORT_DAY_RE = re.compile(r"(?<![\d.])(\d{1,2})\.\s?(\d{1,2})\.?\s?\(([월화수목금토일])\)")
+YEAR_RE = re.compile(r"(?<!\d)(20\d{2})(?:년|\.)")
+ISO_DAY_RE = re.compile(r'date:\s*"(20\d{2})-(\d{2})-(\d{2})"')
+
+
+def check_weekdays(path: Path, lines: list[str], out: list[Finding], default_year: int | None) -> None:
+    """날짜 옆 요일이 실제 달력과 맞는지 (대외협력·운영팀, 오류)."""
+    rp = rel(path)
+    year = default_year
+    for no, line in enumerate(lines, 1):
+        if IGNORE_MARK in line:
+            continue
+        spans = []
+        for m in FULL_DAY_RE.finditer(line):
+            y, mo, d, wd = int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4)
+            year = y
+            spans.append(m.span())
+            _cmp_day(rp, no, y, mo, d, wd, m.group(0), out)
+        for m in SHORT_DAY_RE.finditer(line):
+            if any(a <= m.start() < b for a, b in spans) or year is None:
+                continue
+            _cmp_day(rp, no, year, int(m.group(1)), int(m.group(2)), m.group(3), m.group(0), out)
+        ym = YEAR_RE.findall(line)
+        if ym:
+            year = int(ym[-1])
+
+
+def _cmp_day(rp, no, y, mo, d, wd, text, out):
+    try:
+        real = WEEKDAYS[_dt.date(y, mo, d).weekday()]
+    except ValueError:
+        out.append(Finding("오류", "operations", rp, no, "날짜 오류", f"존재하지 않는 날짜 '{text}' ({y}년 기준)"))
+        return
+    if real != wd:
+        out.append(Finding("오류", "operations", rp, no, "요일 오류",
+                           f"'{text}' — {y}. {mo}. {d}.은 {real}요일"))
+
+
+NUM_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+
+
+def _money(cell: str) -> float | None:
+    c = cell.replace(" ", "")
+    if not re.search(r"\d", c) or re.search(r"[×x*]", c):
+        return None
+    m = NUM_RE.search(c)
+    if not m:
+        return None
+    v = float(m.group(0).replace(",", ""))
+    if "억" in c:
+        v *= 100_000_000
+    elif "만" in c:
+        v *= 10_000
+    elif "천원" in c:
+        v *= 1_000
+    return v
+
+
+def tables_from_md(lines: list[str]) -> list[tuple[int, list[list[str]]]]:
+    tables, cur, start = [], [], 0
+    for no, line in enumerate(lines + [""], 1):
+        t = line.strip()
+        if t.startswith("|") and t.endswith("|"):
+            if not cur:
+                start = no
+            cells = [c.strip() for c in t.strip("|").split("|")]
+            if not all(re.fullmatch(r":?-{2,}:?", c) for c in cells if c):
+                cur.append(cells)
+        elif cur:
+            tables.append((start, cur))
+            cur = []
+    return tables
+
+
+def tables_from_docx(path: Path) -> list[tuple[int, list[list[str]]]]:
+    with zipfile.ZipFile(path) as z:
+        xml = z.read("word/document.xml").decode("utf-8")
+    out = []
+    for i, tbl in enumerate(re.findall(r"(?s)<w:tbl>.*?</w:tbl>", xml), 1):
+        rows = []
+        for tr in re.findall(r"(?s)<w:tr[ >].*?</w:tr>", tbl):
+            cells = ["".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", tc)).strip()
+                     for tc in re.findall(r"(?s)<w:tc>.*?</w:tc>", tr)]
+            rows.append(cells)
+        out.append((i, rows))
+    return out
+
+
+TOTAL_RE = re.compile(r"^(합\s*계|총\s*계|총\s*액|계)$")
+SUBTOTAL_RE = re.compile(r"^(소\s*계|중\s*계)$")
+
+
+def check_table_sums(rp: str, tables, out: list[Finding], docx: bool) -> None:
+    """표의 소계·합계 행을 직접 다시 더해 검산 (재무팀, 오류).
+    소계 = 직전 소계 이후 행들의 합, 합계 = 소계가 아닌 모든 행의 합."""
+    def kind_of(row: list[str]) -> str | None:
+        for c in row[:2]:
+            c2 = c.replace(" ", "")
+            if SUBTOTAL_RE.match(c2):
+                return "sub"
+            if TOTAL_RE.match(c2):
+                return "total"
+        return None
+
+    def compare(row, rows_to_sum, label, start, r_i):
+        for col in range(1, len(row)):
+            tot = _money(row[col])
+            if tot is None:
+                continue
+            vals = [_money(b[col]) for b in rows_to_sum if col < len(b)]
+            vals = [v for v in vals if v is not None]
+            if len(vals) < 2:
+                continue
+            s = sum(vals)
+            if abs(s - tot) > max(1, abs(tot) * 0.0005):
+                where = f"표 {start}번" if docx else f"표({start}번째 줄~)"
+                out.append(Finding("오류", "finance", rp, 0 if docx else start + r_i, "합계 검산",
+                                   f"{where} '{label}' {col + 1}열: 적힌 값 {tot:,.0f} ≠ 계산 값 {s:,.0f} (차이 {tot - s:+,.0f})"))
+
+    for start, rows in tables:
+        segment: list[list[str]] = []
+        all_rows: list[list[str]] = []
+        for r_i, row in enumerate(rows):
+            k = kind_of(row)
+            label = next((c for c in row if c), "")
+            if k == "sub":
+                compare(row, segment, f"{label} {row[1] if len(row) > 1 else ''}".strip(), start, r_i)
+                segment = []
+            elif k == "total":
+                compare(row, all_rows, label, start, r_i)
+                segment, all_rows = [], []
+            else:
+                segment.append(row)
+                all_rows.append(row)
+
+
+def load_config_facts() -> dict:
+    p = ROOT / "www/js/config.js"
+    if not p.exists():
+        return {}
+    src = p.read_text(encoding="utf-8")
+    facts: dict = {"lectures": {}}
+    for m in re.finditer(r'n:\s*(\d)\s*,\s*date:\s*"(20\d{2})-(\d{2})-(\d{2})"', src):
+        facts["lectures"][int(m.group(1))] = (int(m.group(2)), int(m.group(3)), int(m.group(4)))
+    m = re.search(r"ONSITE_CAP\s*=\s*(\d+)", src)
+    if m:
+        facts["onsite_cap"] = int(m.group(1))
+    m = re.search(r"cap:\s*(\d+)", src)
+    if m:
+        facts["deep_cap"] = int(m.group(1))
+    m = re.search(r"year:\s*(20\d{2})", src)
+    if m:
+        facts["year"] = int(m.group(1))
+    return facts
+
+
+CAP_RE = re.compile(r"정원\s*(?:은|:)?\s*(\d+)\s*명")
+LECT_RE = re.compile(r"(?<!\d)([1-5])\s*강(?!\s*(?:이상|이하|중|까지|모두|전체|과정|출석))")
+DATE_ANY_RE = re.compile(r"(?:(20\d{2})[.\-]\s?)?(\d{1,2})[.\-]\s?(\d{1,2})\.?")
+
+
+def check_facts(path: Path, lines: list[str], facts: dict, out: list[Finding]) -> None:
+    """정원·강의 날짜가 www/js/config.js와 같은지 (홍보팀, 경고)."""
+    if not facts:
+        return
+    rp = rel(path)
+    for no, line in enumerate(lines, 1):
+        if IGNORE_MARK in line:
+            continue
+        prev = " ".join(lines[max(0, no - 3):no - 1])
+        for m in CAP_RE.finditer(line):
+            n = int(m.group(1))
+            window = line[max(0, m.start() - 25):m.start()]
+            deep_ctx = "심화" in window or ("심화" in prev and "기본" not in window)
+            if deep_ctx and facts.get("deep_cap") and n != facts["deep_cap"]:
+                out.append(Finding("경고", "marketing", rp, no, "사실 일치",
+                                   f"심화과정 정원 {n}명 ≠ 앱 설정 {facts['deep_cap']}명"))
+            elif not deep_ctx and ("기본" in window or "현장" in window) and facts.get("onsite_cap") and n != facts["onsite_cap"]:
+                out.append(Finding("경고", "marketing", rp, no, "사실 일치",
+                                   f"기본과정 현장 정원 {n}명 ≠ 앱 설정 {facts['onsite_cap']}명"))
+        lm = LECT_RE.findall(line)
+        if len(set(lm)) == 1 and "심화" not in line:
+            n = int(lm[0])
+            want = facts["lectures"].get(n)
+            dm = [d for d in DATE_ANY_RE.finditer(line) if 1 <= int(d.group(2)) <= 12]
+            if want and dm:
+                d = dm[0]
+                got = (int(d.group(2)), int(d.group(3)))
+                if got != (want[1], want[2]):
+                    out.append(Finding("경고", "marketing", rp, no, "사실 일치",
+                                       f"{n}강 날짜 {got[0]}. {got[1]}. ≠ 앱 설정 {want[1]}. {want[2]}."))
+
+
+def check_html_a11y(path: Path, raw: str, out: list[Finding]) -> None:
+    """누리집·앱 HTML 접근성 기본 (디자인팀)."""
+    rp = rel(path)
+    if re.search(r"(?i)<html\b", raw) and not re.search(r'(?i)<html\b[^>]*\blang=', raw):
+        out.append(Finding("경고", "design", rp, 1, "접근성", "<html>에 lang 속성 없음 (lang=\"ko\")"))
+    if re.search(r"(?i)<html\b", raw) and not re.search(r"(?is)<title>\s*\S", raw):
+        out.append(Finding("경고", "design", rp, 1, "접근성", "<title> 없음"))
+    for m in re.finditer(r"(?is)<img\b[^>]*>", raw):
+        tag = m.group(0)
+        if IGNORE_MARK in tag:
+            continue
+        if not re.search(r"\balt\s*=", tag):
+            no = raw[: m.start()].count("\n") + 1
+            out.append(Finding("경고", "design", rp, no, "접근성", "이미지 대체 텍스트(alt) 없음"))
+    for m in re.finditer(r"(?is)<a\b[^>]*target\s*=\s*[\"']_blank[\"'][^>]*>", raw):
+        if not re.search(r"noopener|noreferrer", m.group(0)):
+            no = raw[: m.start()].count("\n") + 1
+            out.append(Finding("참고", "dev", rp, no, "보안", "새 창 링크에 rel=\"noopener\" 없음"))
+
+
+PLAIN_MONEY_RE = re.compile(r"(?<![\d,.])(\d{5,})\s*원")
+
+
+def check_doc_extras(path: Path, lines: list[str], out: list[Finding]) -> None:
+    rp = rel(path)
+    for no, line in enumerate(lines, 1):
+        if IGNORE_MARK in line:
+            continue
+        for m in PLAIN_MONEY_RE.finditer(line):
+            out.append(Finding("참고", "finance", rp, no, "금액 표기", f"'{m.group(0)}' → 세 자리마다 쉼표 ('{int(m.group(1)):,}원')"))
+    head = next((l for l in lines if l.strip()), "")
+    if "계획" in head and "(안)" not in head and IGNORE_MARK not in head:
+        out.append(Finding("경고", "marketing", rp, 1, "추정 표시", "계획 문서 제목에 '(안)' 표시 없음"))
+
+
 def run(targets: list[str], rules: dict, style_official: bool = False) -> list[Finding]:
     findings: list[Finding] = []
+    facts = load_config_facts()
     for f in collect(targets, rules):
         ext = f.suffix.lower()
         try:
@@ -261,10 +495,12 @@ def run(targets: list[str], rules: dict, style_official: bool = False) -> list[F
             if ext == ".docx":
                 lines = docx_text(f).split("\n")
                 kind = "doc"
+                check_table_sums(rel(f), tables_from_docx(f), findings, docx=True)
             else:
                 raw = f.read_text(encoding="utf-8", errors="replace")
                 if ext in (".html", ".htm"):
                     check_logo_css(f, re.findall(r"(?is)<style\b[^>]*>(.*?)</style>", raw) or [""], rules, findings)
+                    check_html_a11y(f, raw, findings)
                     lines = html_visible_lines(raw)
                     kind = "doc"
                 elif ext in rules["doc_exts"]:
@@ -274,6 +510,12 @@ def run(targets: list[str], rules: dict, style_official: bool = False) -> list[F
                     if ext == ".css":
                         check_logo_css(f, lines, rules, findings)
             check_text(f, lines, rules, kind, findings)
+            check_weekdays(f, lines, findings, facts.get("year"))
+            if kind == "doc":
+                check_facts(f, lines, facts, findings)
+                check_doc_extras(f, lines, findings)
+                if ext == ".md":
+                    check_table_sums(rel(f), tables_from_md(lines), findings, docx=False)
             if style_official and kind == "doc":
                 check_official_style(f, lines, findings)
         except Exception as e:  # 읽을 수 없는 파일은 참고로만 남김

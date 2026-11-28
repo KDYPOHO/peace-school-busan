@@ -56,3 +56,37 @@ test("현재 저장소에는 오류가 없음", () => {
   const { code, findings } = check();
   assert.equal(code, 0, JSON.stringify(findings.filter((f) => f.level === "오류"), null, 1));
 });
+
+test("요일·존재하지 않는 날짜는 오류 (짧은 날짜는 앞의 연도 기준)", () => {
+  const { findings } = check(fx("dates.md"));
+  const day = findings.filter((f) => f.rule === "요일 오류");
+  assert.equal(day.length, 1, JSON.stringify(findings));
+  assert.match(day[0].message, /8\. 13\.은 금요일/);
+  assert.ok(findings.some((f) => f.rule === "날짜 오류" && f.message.includes("2. 30.")));
+});
+
+test("소계·합계 검산: 틀린 소계와 합계를 모두 찾음, '숙소 계약금'은 소계로 오인하지 않음", () => {
+  const { findings } = check(fx("budget-wrong.md"));
+  const sums = findings.filter((f) => f.rule === "합계 검산");
+  assert.equal(sums.length, 2, JSON.stringify(sums));
+  assert.ok(sums.some((f) => f.message.includes("380") && f.message.includes("370")));
+  assert.ok(sums.some((f) => f.message.includes("990") && f.message.includes("970")));
+});
+
+test("정원·강의 날짜를 앱 설정(config.js)과 대조, '4강 이상'은 강의 번호로 보지 않음", () => {
+  const { findings } = check(fx("facts.md"));
+  const facts = findings.filter((f) => f.rule === "사실 일치");
+  assert.equal(facts.length, 2, JSON.stringify(facts));
+  assert.ok(facts.some((f) => f.message.includes("심화과정 정원 30명")));
+  assert.ok(facts.some((f) => f.message.includes("2강 날짜 4. 25.")));
+});
+
+test("HTML 접근성: lang·title·alt 누락, 새 창 링크 noopener", () => {
+  const { findings } = check(fx("page.html"));
+  const msgs = findings.map((f) => f.message).join("\n");
+  assert.match(msgs, /lang/);
+  assert.match(msgs, /<title>/);
+  assert.equal(findings.filter((f) => f.message.includes("alt")).length, 1);
+  assert.match(msgs, /noopener/);
+});
+

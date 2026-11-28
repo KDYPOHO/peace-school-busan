@@ -163,5 +163,12 @@
     "drop-shadow",
     "text-shadow"
   ],
-  "budget_money_threshold": 5
+  "budget_money_threshold": 5,
+  "hype_negations": [
+    "금지",
+    "쓰지 않",
+    "사용하지",
+    "제외",
+    "지양"
+  ]
 }

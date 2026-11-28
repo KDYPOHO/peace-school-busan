@@ -47,7 +47,7 @@ export const CRITERIA = [
   { k: "독창성", w: 30 }, { k: "실현 가능성", w: 30 }, { k: "평화 가치", w: 25 }, { k: "발표", w: 15 }
 ];
 export const REGIONS = ["서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주", "해외"];
-export const DEEP_APPLY_UNTIL = "2027-06-20"; // 에뮬레이터·체험용 지원 마감 (KST)
+export const DEEP_APPLY_UNTIL = "2027-06-25"; // 심화 지원 마감 (KST, 실행계획 기준). 운영은 courseSchedule/deep.closesAt = 2027-06-26 00:00 KST
 export const DEEP_STATUS = { submitted: "검토 중", selected: "선발", waitlist: "예비 선발", rejected: "미선발" };
 
 // 개인정보 보호책임자 (개인정보 보호법 제31조) — 사무처 확정 후 반드시 실제 정보로 바꾸세요

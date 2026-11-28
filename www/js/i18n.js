@@ -525,7 +525,7 @@ const RULES = [
   [/^오늘 · 기본과정 (\d+)강$/, "Today · Basic course · Session $1"],
   [/^다음 강의 · 기본과정 (\d+)강$/, "Next · Basic course · Session $1"],
   [/^다음 강의 (\d+)강 · (.+)$/, "Next session $1 · $2"],
-  [/^(\d+)강 출석$/, "Session $1 attendance"],
+  [/^(\d+)강 출석$/, "Session $1:"],
   [/^(\d+) ?\/ ?(\d+)강 출석$/, "$1 / $2 sessions attended"],
   [/^(\d+)강 더 필요$/, "$1 more needed"],
   [/^(\d+)강 현장 출석 · 개인 QR$/, "Session $1 in-person check-in · personal QR"],
@@ -575,8 +575,7 @@ const RULES = [
   [/^정원 (\d+)명을 넘겨 선발할 수 없어요\. 지원 (\d+)건$/, "You can't select more than $1. Applications: $2"],
   [/^예비 (\d+)명\. 선발은 운영위원회가 직접 하고, 앱은 출석과 지원서를 나란히 보여 주기만 해요\.$/, "Waitlist: $1. The steering committee makes the selection; the app only shows attendance and applications side by side."],
   [/^강의 당일 (\d+:\d+) 30분 전부터 종료 1시간 뒤까지 아래 버튼을 누르면 온라인 출석이 기록돼요\. 운영진이 중계 접속 기록과 대조해요\.$/, "On session day, from 30 minutes before $1 until 1 hour after the end, tap the button below to record online attendance. Staff check it against the stream log."],
-  [/^강의 당일 시작 30분 전부터 아래 버튼을 누르면 온라인 출석이 기록돼요\. 운영진이 중계 접속 기록과 대조해요\.$/, "On session day, from 30 minutes before the start, tap the button below to record online attendance. Staff check it against the stream log."],
-  [/^(\d+)강 출석$/, "Session $1:"]
+  [/^강의 당일 시작 30분 전부터 아래 버튼을 누르면 온라인 출석이 기록돼요\. 운영진이 중계 접속 기록과 대조해요\.$/, "On session day, from 30 minutes before the start, tap the button below to record online attendance. Staff check it against the stream log."]
 ];
 
 
@@ -729,8 +728,17 @@ function lookup(k) {
 }
 // 조각 문장: " · "로 나눈 조각마다 번역하고, 남은 숫자 단위만 바꾼다
 const UNITS = [[/(\d+)명/g, "$1"], [/(\d+)건/g, "$1"], [/(\d+)강/g, "S$1"]];
+const CACHE = new Map();
 export function tr(text) {
   if (!text || !/[가-힣]/.test(text)) return text;
+  const hit = CACHE.get(text);
+  if (hit !== undefined) return hit;
+  const res = trRaw(text);
+  if (CACHE.size > 5000) CACHE.clear();
+  CACHE.set(text, res);
+  return res;
+}
+function trRaw(text) {
   const k = norm(text);
   let out = lookup(k);
   if (out === undefined && k.includes(" · ")) {
@@ -805,7 +813,11 @@ export function initI18n() {
     const b = e.target.closest && e.target.closest("[data-lang-set]");
     if (!b) return;
     const v = b.getAttribute("data-lang-set");
-    if (v !== currentLang()) { store.set(v); location.reload(); }
+    if (v === currentLang()) return;
+    store.set(v);
+    // 주소의 ?lang= 이 저장값을 다시 덮지 않도록 지운 뒤 새로 연다
+    try { const u = new URL(location.href); if (u.searchParams.has("lang")) { u.searchParams.delete("lang"); history.replaceState(null, "", u.toString()); } } catch (err) {}
+    location.reload();
   });
   if (lang !== "en") return;
   translateNode(document.body);
@@ -813,7 +825,10 @@ export function initI18n() {
   observer = new MutationObserver(list => {
     for (const m of list) {
       if (m.type === "characterData") translateNode(m.target);
-      else if (m.type === "attributes") translateNode(m.target);
+      else if (m.type === "attributes") {
+        const el = m.target, a = m.attributeName, v = el.getAttribute(a);
+        if (v && !el.closest("[data-noi18n]")) { const t = tr(v); if (t !== v) el.setAttribute(a, t); }
+      }
       else m.addedNodes.forEach(translateNode);
     }
   });

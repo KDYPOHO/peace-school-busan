@@ -18,7 +18,7 @@ MENU = [
 ]
 
 PAGES = {
-    "index.html": dict(title="한반도 평화학교 부산 청년 과정", desc="민주평화통일자문회의 부산지역회의 한반도 평화학교 부산 청년 과정. 기본과정 5강(회당 2시간)과 심화과정 2박3일(정원 40명)을 전국 청년·대학생에게 운영합니다.", active=None),
+    "index.html": dict(title="한반도 평화학교 부산 청년 과정", desc="2027 한반도 평화학교 부산 청년 과정(안). 기본과정은 4. 10.~6. 5. 토요일 5회(회당 2시간, 부산 현장·온라인), 심화과정은 8. 13.~15. 2박3일(정원 40명)입니다. 참가비 무료, 3. 2.부터 앱으로 신청받을 계획입니다.", active=None),
     "about.html": dict(title="평화학교 소개", desc="한반도 평화학교 부산 청년 과정의 추진 배경, 비전과 목표, 운영 체계, 2026년 과정 대비 달라진 점을 안내합니다.", active="about.html"),
     "course.html": dict(title="교육과정", desc="기본과정 5강(회당 2시간, 현장·온라인)과 심화과정 2박3일(부산, 정원 40명) 일정과 수료 기준을 안내합니다.", active="course.html"),
     "apply.html": dict(title="참여 안내", desc="참여 대상, 모집 일정, 앱 신청 방법, 심화과정 선발 기준과 자주 묻는 질문을 안내합니다.", active="apply.html"),
@@ -59,7 +59,7 @@ def head(page, meta):
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{meta["desc"]}">
 <meta property="og:url" content="{SITE}{'' if page == 'index.html' else page}">
-<meta property="og:image" content="{SITE}img/photo-sea.jpg">
+<meta property="og:image" content="{SITE}img/photo-unmc.jpg">
 <link rel="icon" href="img/symbol.png">
 <link rel="preload" href="css/fonts/Pretendard-Regular.subset.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/site.css">
@@ -90,8 +90,8 @@ FOOT = f'''
 <footer class="foot">
   <div class="wrap">
     <nav class="foot-top" aria-label="바닥글 메뉴">
-      <a class="privacy" href="{APP}privacy.html">개인정보 처리방침</a>
-      <a href="{APP}terms.html">이용약관</a>
+      <a class="privacy" href="{APP}privacy.html">평화학교 앱 개인정보 처리방침</a>
+      <a href="{APP}terms.html">평화학교 앱 이용약관</a>
       <a href="about.html#system">운영 체계</a>
       <a href="apply.html#faq">자주 묻는 질문</a>
       <a href="{ARCHIVE}" target="_blank" rel="noopener" title="새 창 열림">청년아카이브</a>
@@ -100,8 +100,8 @@ FOOT = f'''
       <div class="mark"><img src="img/emblem.jpg" width="320" height="315" alt="민주평화통일자문회의 엠블럼"></div>
       <div>
         <address><b>민주평화통일자문회의 부산지역회의</b><br>한반도 평화학교 부산 청년 과정<br>문의: 부산지역회의 사무처 (주소·전화번호 확정 후 기재)</address>
-        <p class="credit">사진 출처(Wikimedia Commons): 재한유엔기념공원·감천문화마을·유엔기념공원 기념관 사진 Bernard Gagnon(CC0), 해운대 바다 사진 Masterhatch(<a href="https://creativecommons.org/licenses/by-sa/4.0/deed.ko" target="_blank" rel="noopener">CC BY-SA 4.0</a>, 일부 자름). 앱 화면은 시험용 가상 정보입니다.<br>이 누리집은 쿠키·방문 분석 도구를 쓰지 않으며 개인정보를 수집하지 않습니다.</p>
-        <p class="copy">© 2027 민주평화통일자문회의 부산지역회의. 기관 명칭과 로고는 사무처 승인 범위에서만 사용합니다.</p>
+        <p class="credit">사진 출처(Wikimedia Commons): 재한유엔기념공원·감천문화마을·유엔기념공원 기념관 사진 Bernard Gagnon(CC0), 해운대 바다 사진 Masterhatch(<a href="https://commons.wikimedia.org/wiki/File:Haeundae_District_and_Beach.jpg" target="_blank" rel="noopener">원본</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/deed.ko" target="_blank" rel="noopener">CC BY-SA 4.0</a>, 일부를 잘라 냄. 잘라 낸 사진도 CC BY-SA 4.0). 앱 화면은 시험용 가상 정보입니다.<br>이 누리집은 쿠키·방문 분석 도구를 쓰지 않으며 운영자는 개인정보를 수집하지 않습니다. 다만 호스팅 업체(GitHub)가 보안을 위해 접속 기록을 처리할 수 있습니다.</p>
+        <p class="copy">기관 명칭과 로고는 사무처 승인 범위에서만 사용합니다. 저작권 표시는 사무처 승인 후 기재합니다.</p>
       </div>
     </div>
   </div>

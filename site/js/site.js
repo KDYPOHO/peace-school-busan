@@ -27,6 +27,8 @@
       else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
     });
     toggle.addEventListener('click', function () {
+      // 메뉴 판은 머리글 바로 아래에서 시작 (시안 띠가 보이는 상태에서도 로고가 가려지지 않도록)
+      if (!head.classList.contains('open')) head.style.setProperty('--menu-top', Math.max(0, head.getBoundingClientRect().bottom) + 'px');
       var open = head.classList.toggle('open');
       toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
       toggle.querySelector('.sr').textContent = open ? '메뉴 닫기' : '메뉴 열기';
@@ -113,7 +115,7 @@
       }
     });
     tap.style.opacity = tp;
-    if (tp) { tap.style.left = tx * 100 + '%'; tap.style.top = ty * 100 + '%'; tap.style.transform = 'scale(' + ts + ')'; }
+    if (tp) { tap.style.left = tx * 100 + '%'; tap.style.top = 'calc(' + ty * 100 + '% + 34px)'; tap.style.transform = 'scale(' + ts + ')'; }
     var to = p(t, 6200, 6650) * (1 - p(t, 8800, 9200));
     toast.style.opacity = to;
     toast.style.transform = 'translateY(' + (-16 * (1 - to)) + 'px)';
